@@ -1,0 +1,44 @@
+stateDiagram-v2
+    [*] --> booting
+
+    booting --> idle: BOOT_OK / hydrateTasks (BootInput -> HydrateResult)
+    booting --> idle_running: BOOT_OK_OPEN_SESSION / resumeOpenSession (BootInput -> HydrateResult)
+    booting --> error_corrupt: BOOT_CORRUPT / stashCorruptAndPrompt (BootInput -> CorruptRecoveryResult)
+    booting --> error_storage_unavailable: BOOT_STORAGE_UNAVAILABLE / startMemoryOnly (BootInput -> MemoryOnlyResult)
+    booting --> error_schema_mismatch: BOOT_SCHEMA_MISMATCH / promptMigrationReset (BootInput -> SchemaMismatchResult)
+    booting --> idle_running: BOOT_MULTI_OPEN / reconcileMultipleOpenSessions (BootInput -> HydrateResult)
+
+    idle --> idle: CREATE_TASK_OK / createTask (TaskInput -> Task)
+    idle --> error_validation: CREATE_TASK_INVALID / rejectInvalidName (TaskInput -> ValidationError)
+    idle --> error_storage_write: CREATE_TASK_STORAGE_FAIL / reportStorageWriteFailure (TaskInput -> StorageWriteError)
+
+    idle --> idle_running: START_TIMER / startSessionOnTask (StartTimerInput -> Task)
+    idle --> error_task_not_found: START_TIMER_NOT_FOUND / reportTaskNotFound (StartTimerInput -> TaskNotFoundError)
+    idle --> error_storage_write: START_TIMER_STORAGE_FAIL / retryOrRevertStart (StartTimerInput -> StorageWriteError)
+
+    idle_running --> idle: STOP_TIMER / stopSessionOnTask (StopTimerInput -> Task)
+    idle_running --> idle: STOP_TIMER_NEGATIVE / clampNegativeAndClose (StopTimerInput -> Task)
+    idle_running --> idle_running: STOP_TIMER_NO_OPEN / reconcileNoOpenSession (StopTimerInput -> NoOpenSessionError)
+    idle_running --> error_storage_write: STOP_TIMER_STORAGE_FAIL / retryOrKeepOpen (StopTimerInput -> StorageWriteError)
+
+    idle_running --> idle_running: START_TIMER / switchRunningTask (StartTimerInput -> Task)
+    idle_running --> idle_running: START_TIMER_SAME / ignoreAlreadyRunning (StartTimerInput -> Task)
+
+    idle_running --> idle_running: CREATE_TASK_OK / createTask (TaskInput -> Task)
+    idle_running --> error_validation: CREATE_TASK_INVALID / rejectInvalidName (TaskInput -> ValidationError)
+
+    idle --> idle: DELETE_TASK_OK / deleteTask (DeleteTaskInput -> DeleteResult)
+    idle --> idle: DELETE_TASK_CANCELLED / abortDeleteSilently (DeleteTaskInput -> DeleteResult)
+    idle --> error_storage_write: DELETE_TASK_STORAGE_FAIL / retryOrRestoreDelete (DeleteTaskInput -> StorageWriteError)
+    idle_running --> idle: DELETE_RUNNING_TASK / discardOpenAndDelete (DeleteTaskInput -> DeleteResult)
+    idle_running --> idle_running: DELETE_TASK_OK / deleteTask (DeleteTaskInput -> DeleteResult)
+
+    idle --> idle: TICK / recomputeTotals (TickInput -> TickResult)
+    idle_running --> idle_running: TICK / recomputeTotalsWithOpen (TickInput -> TickResult)
+
+    error_validation --> idle: DISMISS_ERROR / dismissError (DismissInput -> IdleSnapshot)
+    error_storage_write --> idle: DISMISS_ERROR / dismissError (DismissInput -> IdleSnapshot)
+    error_task_not_found --> idle: DISMISS_ERROR / refreshTaskList (DismissInput -> IdleSnapshot)
+    error_corrupt --> idle: USER_RESET_CORRUPT / resetCorruptStorage (DismissInput -> IdleSnapshot)
+    error_storage_unavailable --> idle: DISMISS_ERROR / acknowledgeMemoryOnly (DismissInput -> IdleSnapshot)
+    error_schema_mismatch --> idle: USER_RESET_SCHEMA / resetOnSchemaMismatch (DismissInput -> IdleSnapshot)

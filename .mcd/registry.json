@@ -1,0 +1,304 @@
+{
+  "phase0": {
+    "status": "complete",
+    "timestamp": "2026-04-15T08:37:38Z"
+  },
+  "phase1": {
+    "status": "complete",
+    "timestamp": "2026-04-15T11:40:00Z",
+    "language": "typescript",
+    "config_file": ".mcd/config.json",
+    "manifest_file": ".mcd/manifest.json",
+    "statechart_file": ".mcd/statechart.mmd",
+    "type_files": [
+      "src/types/session.ts",
+      "src/types/task.ts",
+      "src/types/inputs.ts",
+      "src/types/errors.ts",
+      "src/types/events.ts"
+    ],
+    "files": {}
+  },
+  "phase2": {
+    "status": "complete",
+    "timestamp": "2026-04-15T12:00:00Z",
+    "files": {
+      "src/services/taskService.ts": {
+        "status": "verified",
+        "hash": "6f7a85ef369a994a5fa7b7045beb240e3d6694d0a345c1ed0bab32b5bb4e8702",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [
+          "createTask",
+          "rejectInvalidName",
+          "reportStorageWriteFailure",
+          "deleteTask",
+          "abortDeleteSilently",
+          "retryOrRestoreDelete",
+          "discardOpenAndDelete"
+        ],
+        "filled_timestamp": "2026-04-15T09:00:35Z"
+      },
+      "src/services/timerService.ts": {
+        "status": "verified",
+        "hash": "222332e0cff6f5328d0710925df0d097150906b0115e6e59d87b467c94f0809c",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [
+          "startSessionOnTask",
+          "switchRunningTask",
+          "ignoreAlreadyRunning",
+          "stopSessionOnTask",
+          "clampNegativeAndClose",
+          "reportTaskNotFound",
+          "retryOrRevertStart",
+          "retryOrKeepOpen",
+          "reconcileNoOpenSession"
+        ],
+        "filled_timestamp": "2026-04-15T09:00:47Z"
+      },
+      "src/services/bootService.ts": {
+        "status": "verified",
+        "hash": "3903de03f5e715f89301e8b110667c2855a09e561766f955510181c9866e5be4",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [
+          "hydrateTasks",
+          "resumeOpenSession",
+          "stashCorruptAndPrompt",
+          "startMemoryOnly",
+          "promptMigrationReset",
+          "reconcileMultipleOpenSessions"
+        ],
+        "filled_timestamp": "2026-04-15T09:01:17Z"
+      },
+      "src/services/tickService.ts": {
+        "status": "verified",
+        "hash": "e65113b9ea50aa16cbf8ccc0745c5793b415e7a0d7481f19424dbe9036695409",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [
+          "recomputeTotals",
+          "recomputeTotalsWithOpen"
+        ],
+        "filled_timestamp": "2026-04-15T08:59:35Z"
+      },
+      "src/services/errorService.ts": {
+        "status": "verified",
+        "hash": "0ac3c6f237c6fde9fe5351354c185b6c29799432127de1990b4d761f8c86c02b",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [
+          "dismissError",
+          "refreshTaskList",
+          "resetCorruptStorage",
+          "acknowledgeMemoryOnly",
+          "resetOnSchemaMismatch"
+        ],
+        "filled_timestamp": "2026-04-15T08:59:39Z"
+      },
+      "src/storage/localStorageAdapter.ts": {
+        "status": "verified",
+        "hash": "3f97c75404302838a734f1e21961a3ff5e8c302d1cfca3d8efa40b1ed5555bed",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [
+          "readPersistedState",
+          "parsePersistedState",
+          "writePersistedState",
+          "clearPersistedState",
+          "stashCorruptBlob",
+          "isStorageAvailable"
+        ],
+        "filled_timestamp": "2026-04-15T08:59:42Z"
+      },
+      "src/lib/time.ts": {
+        "status": "verified",
+        "hash": "a95267c42a41d7d77344e47fdac05570e7eb0393aa343d5b610f0b481b52d703",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [
+          "computeTaskTotalMs",
+          "formatHHMMSS",
+          "hasOpenSession",
+          "getOpenSession"
+        ],
+        "filled_timestamp": "2026-04-15T08:59:18Z"
+      },
+      "src/lib/id.ts": {
+        "status": "verified",
+        "hash": "653aa260634df19004f3a3f805d4521a965133abdb80776328e4a4c7bb2bfaf1",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [
+          "generateId"
+        ],
+        "filled_timestamp": "2026-04-15T08:59:07Z"
+      },
+      "src/main.ts": {
+        "status": "verified",
+        "hash": "e66d682d9c6847be70ca40db0bb245be13da45be9da7b3a2b58278c740ca4967",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [],
+        "filled_timestamp": "2026-04-15T09:02:50Z"
+      },
+      "src/ui/app.ts": {
+        "status": "verified",
+        "hash": "286382c7e21dff994e3511ce5acafb6a8d3f4c0bf3f66697502bc3fd51b0ca46",
+        "fillAttempts": 1,
+        "verifyAttempts": 1,
+        "actions": [
+          "initApp",
+          "renderApp",
+          "renderTaskRow",
+          "handleCreateTask",
+          "handleStartTimer",
+          "handleStopTimer",
+          "handleDeleteTask"
+        ],
+        "filled_timestamp": "2026-04-15T09:02:33Z"
+      },
+      "index.html": {
+        "status": "boilerplate",
+        "hash": null,
+        "fillAttempts": 0,
+        "verifyAttempts": 0
+      },
+      "package.json": {
+        "status": "boilerplate",
+        "hash": null,
+        "fillAttempts": 0,
+        "verifyAttempts": 0
+      },
+      "tsconfig.json": {
+        "status": "boilerplate",
+        "hash": null,
+        "fillAttempts": 0,
+        "verifyAttempts": 0
+      },
+      "vite.config.ts": {
+        "status": "boilerplate",
+        "hash": null,
+        "fillAttempts": 0,
+        "verifyAttempts": 0
+      }
+    }
+  },
+  "phase3": {
+    "status": "complete",
+    "timestamp": "2026-04-15T12:30:00Z",
+    "files_audited": 10,
+    "type_issues_resolved": 0,
+    "pseudocode_issues_resolved": 2,
+    "statechart_coverage": {
+      "covered": 32,
+      "total": 32,
+      "gaps": []
+    },
+    "test_files": {
+      "tests/lib/id.test.ts": {
+        "status": "test",
+        "covers": [
+          "generateId"
+        ]
+      },
+      "tests/lib/time.test.ts": {
+        "status": "test",
+        "covers": [
+          "computeTaskTotalMs",
+          "formatHHMMSS",
+          "hasOpenSession",
+          "getOpenSession"
+        ]
+      },
+      "tests/storage/localStorageAdapter.test.ts": {
+        "status": "test",
+        "covers": [
+          "readPersistedState",
+          "parsePersistedState",
+          "writePersistedState",
+          "clearPersistedState",
+          "stashCorruptBlob",
+          "isStorageAvailable"
+        ]
+      },
+      "tests/services/taskService.test.ts": {
+        "status": "test",
+        "covers": [
+          "createTask",
+          "rejectInvalidName",
+          "reportStorageWriteFailure",
+          "deleteTask",
+          "abortDeleteSilently",
+          "retryOrRestoreDelete",
+          "discardOpenAndDelete"
+        ]
+      },
+      "tests/services/timerService.test.ts": {
+        "status": "test",
+        "covers": [
+          "startSessionOnTask",
+          "switchRunningTask",
+          "ignoreAlreadyRunning",
+          "stopSessionOnTask",
+          "clampNegativeAndClose",
+          "reportTaskNotFound",
+          "retryOrRevertStart",
+          "retryOrKeepOpen",
+          "reconcileNoOpenSession"
+        ]
+      },
+      "tests/services/bootService.test.ts": {
+        "status": "test",
+        "covers": [
+          "hydrateTasks",
+          "resumeOpenSession",
+          "stashCorruptAndPrompt",
+          "startMemoryOnly",
+          "promptMigrationReset",
+          "reconcileMultipleOpenSessions"
+        ]
+      },
+      "tests/services/tickService.test.ts": {
+        "status": "test",
+        "covers": [
+          "recomputeTotals",
+          "recomputeTotalsWithOpen"
+        ]
+      },
+      "tests/services/errorService.test.ts": {
+        "status": "test",
+        "covers": [
+          "dismissError",
+          "refreshTaskList",
+          "resetCorruptStorage",
+          "acknowledgeMemoryOnly",
+          "resetOnSchemaMismatch"
+        ]
+      },
+      "tests/helpers/localStorageMock.ts": {
+        "status": "helper",
+        "covers": []
+      }
+    },
+    "notes": [
+      "Tightened rejectInvalidName fallback message to be more specific.",
+      "Expanded renderApp Logic with concrete DOM selectors and enable/disable rules.",
+      "UI-layer functions (initApp, renderApp, renderTaskRow, handleCreateTask, handleStartTimer, handleStopTimer, handleDeleteTask) are not unit-tested at this phase; they require a DOM/jsdom harness and are covered implicitly by service tests."
+    ]
+  },
+  "phase4": {
+    "status": "complete",
+    "timestamp": "2026-04-15T09:03:07Z"
+  },
+  "phase5": {
+    "status": "complete",
+    "timestamp": "2026-04-15T09:25:39Z",
+    "verified": 10,
+    "failed": 0,
+    "skipped": 0,
+    "typecheck": "pass",
+    "test_results": "85/85 pass across 8 files"
+  }
+}

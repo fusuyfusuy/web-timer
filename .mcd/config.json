@@ -1,0 +1,21 @@
+{
+  "language": "typescript",
+  "profile": {
+    "file_ext": ".ts",
+    "test_ext": ".test.ts",
+    "src_dir": "src",
+    "test_dir": "tests",
+    "types_dir": "src/types",
+    "stub_body": "throw new Error('not implemented')",
+    "comment_prefix": "//",
+    "validation_lib": "zod",
+    "test_framework": "vitest",
+    "bundler": "vite",
+    "commands": {
+      "lint": "npx eslint {file} --fix",
+      "typecheck": "npx tsc --noEmit",
+      "test": "npx vitest run --reporter=verbose {test_file}"
+    }
+  },
+  "notes": "Greenfield browser app. No package.json existed; TypeScript chosen because feature is a browser web app using localStorage. Vite selected as bundler for simplicity and fast dev loop."
+}

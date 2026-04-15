@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web Timer</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Web Timer</h1>
+      </header>
+
+      <section id="create-task-section">
+        <form id="create-task-form">
+          <input
+            type="text"
+            id="task-name-input"
+            placeholder="New task name…"
+            maxlength="200"
+            autocomplete="off"
+          />
+          <button type="submit" id="add-task-btn">Add Task</button>
+        </form>
+        <p id="validation-error" class="error" hidden></p>
+      </section>
+
+      <section id="error-banner" hidden>
+        <p id="error-message"></p>
+        <button id="dismiss-error-btn">Dismiss</button>
+        <button id="reset-storage-btn" hidden>Reset Data</button>
+      </section>
+
+      <section id="task-list-section">
+        <ul id="task-list"></ul>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
