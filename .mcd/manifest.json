@@ -1,0 +1,213 @@
+{
+  "version": "1.0.0",
+  "feature": "webtimer-local-task-tracking-web-app",
+  "language": "typescript",
+  "statechart_file": ".mcd/statechart.mmd",
+  "entities": [
+    {
+      "name": "Task",
+      "description": "A user-created unit of work that owns a list of timer sessions.",
+      "fields": [
+        { "name": "id", "type": "string", "notes": "UUID, unique within local dataset" },
+        { "name": "name", "type": "string", "notes": "Non-empty trimmed, max 200 chars" },
+        { "name": "createdAt", "type": "number", "notes": "Epoch ms (UTC)" },
+        { "name": "sessions", "type": "Session[]", "notes": "Ordered oldest -> newest" }
+      ]
+    },
+    {
+      "name": "Session",
+      "description": "A single timed interval on a task. Open if endedAt is null.",
+      "fields": [
+        { "name": "startedAt", "type": "number", "notes": "Epoch ms" },
+        { "name": "endedAt", "type": "number | null", "notes": "Null when session is still running; otherwise >= startedAt" }
+      ]
+    },
+    {
+      "name": "TaskInput",
+      "description": "Raw user input to create a task.",
+      "fields": [
+        { "name": "name", "type": "string", "notes": "Will be trimmed and validated" }
+      ]
+    },
+    {
+      "name": "PersistedState",
+      "description": "Top-level blob written to localStorage.",
+      "fields": [
+        { "name": "schemaVersion", "type": "number" },
+        { "name": "tasks", "type": "Task[]" }
+      ]
+    }
+  ],
+  "features": [
+    {
+      "name": "CreateTask",
+      "description": "Validate a name and persist a new Task with empty sessions.",
+      "entry_transitions": ["CREATE_TASK_OK", "CREATE_TASK_INVALID", "CREATE_TASK_STORAGE_FAIL"]
+    },
+    {
+      "name": "StartTimer",
+      "description": "Open a new Session on a task, stopping any other running task first.",
+      "entry_transitions": ["START_TIMER", "START_TIMER_NOT_FOUND", "START_TIMER_SAME", "START_TIMER_STORAGE_FAIL"]
+    },
+    {
+      "name": "StopTimer",
+      "description": "Close the open Session on the running task and accumulate duration.",
+      "entry_transitions": ["STOP_TIMER", "STOP_TIMER_NEGATIVE", "STOP_TIMER_NO_OPEN", "STOP_TIMER_STORAGE_FAIL"]
+    },
+    {
+      "name": "DeleteTask",
+      "description": "Confirm then remove a task and its sessions from storage.",
+      "entry_transitions": ["DELETE_TASK_OK", "DELETE_TASK_CANCELLED", "DELETE_TASK_STORAGE_FAIL", "DELETE_RUNNING_TASK"]
+    },
+    {
+      "name": "ViewTotals",
+      "description": "Compute per-task formatted totals, ticking at 1Hz while a timer is running.",
+      "entry_transitions": ["TICK"]
+    },
+    {
+      "name": "RehydrateOnLoad",
+      "description": "Read tasks from localStorage at boot, resuming any open session.",
+      "entry_transitions": ["BOOT_OK", "BOOT_OK_OPEN_SESSION", "BOOT_CORRUPT", "BOOT_STORAGE_UNAVAILABLE", "BOOT_SCHEMA_MISMATCH", "BOOT_MULTI_OPEN"]
+    },
+    {
+      "name": "ErrorRecovery",
+      "description": "Dismiss/reset handlers that move error states back into idle.",
+      "entry_transitions": ["DISMISS_ERROR", "USER_RESET_CORRUPT", "USER_RESET_SCHEMA"]
+    }
+  ],
+  "flows": [
+    {
+      "name": "CreateTask",
+      "steps": [
+        "User submits name via input (Enter or button)",
+        "validateTaskInput trims + length-checks",
+        "createTask assigns id, createdAt, empty sessions",
+        "persistState writes updated task list",
+        "render new row, clear input"
+      ]
+    },
+    {
+      "name": "StartTimer",
+      "steps": [
+        "User clicks Start on row",
+        "If another task has open session: stopSessionOnTask on that one first (switchRunningTask)",
+        "startSessionOnTask appends { startedAt: now, endedAt: null }",
+        "persistState",
+        "UI shows running + live elapsed"
+      ]
+    },
+    {
+      "name": "StopTimer",
+      "steps": [
+        "User clicks Stop",
+        "Locate open session",
+        "Set endedAt = now (clamp to startedAt if clock skew)",
+        "persistState",
+        "UI flips to not-running and shows new total"
+      ]
+    },
+    {
+      "name": "ViewTotals",
+      "steps": [
+        "On tick (1Hz while running) or on any state change",
+        "computeTaskTotal sums completed durations + live open-session delta",
+        "formatTotalHHMMSS renders display string"
+      ]
+    },
+    {
+      "name": "DeleteTask",
+      "steps": [
+        "User clicks Delete",
+        "Native confirm() — cancel aborts silently",
+        "If task was running, discard open session",
+        "Remove task from in-memory list",
+        "persistState",
+        "Remove row from UI"
+      ]
+    },
+    {
+      "name": "RehydrateOnLoad",
+      "steps": [
+        "Read persisted blob",
+        "If missing -> empty list",
+        "Parse + schema-validate",
+        "Corrupt -> stash under backup key and prompt reset",
+        "Schema mismatch -> prompt migration/reset",
+        "Multiple open sessions -> keep most recent open, clamp others",
+        "One open session -> enter idle_running",
+        "No open session -> enter idle"
+      ]
+    }
+  ],
+  "dependencies": {
+    "runtime": ["zod"],
+    "dev": ["typescript", "vite", "vitest", "@types/node", "eslint", "@typescript-eslint/parser", "@typescript-eslint/eslint-plugin"],
+    "browser_apis": ["localStorage", "crypto.randomUUID", "Date.now", "window.confirm", "setInterval"]
+  },
+  "statechart": {
+    "initial": "booting",
+    "states": [
+      "booting",
+      "idle",
+      "idle_running",
+      "error_validation",
+      "error_storage_write",
+      "error_task_not_found",
+      "error_corrupt",
+      "error_storage_unavailable",
+      "error_schema_mismatch"
+    ],
+    "transitions": [
+      { "from": "booting", "to": "idle", "event": "BOOT_OK", "action": "hydrateTasks", "input_type": "BootInput", "output_type": "HydrateResult" },
+      { "from": "booting", "to": "idle_running", "event": "BOOT_OK_OPEN_SESSION", "action": "resumeOpenSession", "input_type": "BootInput", "output_type": "HydrateResult" },
+      { "from": "booting", "to": "error_corrupt", "event": "BOOT_CORRUPT", "action": "stashCorruptAndPrompt", "input_type": "BootInput", "output_type": "CorruptRecoveryResult" },
+      { "from": "booting", "to": "error_storage_unavailable", "event": "BOOT_STORAGE_UNAVAILABLE", "action": "startMemoryOnly", "input_type": "BootInput", "output_type": "MemoryOnlyResult" },
+      { "from": "booting", "to": "error_schema_mismatch", "event": "BOOT_SCHEMA_MISMATCH", "action": "promptMigrationReset", "input_type": "BootInput", "output_type": "SchemaMismatchResult" },
+      { "from": "booting", "to": "idle_running", "event": "BOOT_MULTI_OPEN", "action": "reconcileMultipleOpenSessions", "input_type": "BootInput", "output_type": "HydrateResult" },
+
+      { "from": "idle", "to": "idle", "event": "CREATE_TASK_OK", "action": "createTask", "input_type": "TaskInput", "output_type": "Task" },
+      { "from": "idle", "to": "error_validation", "event": "CREATE_TASK_INVALID", "action": "rejectInvalidName", "input_type": "TaskInput", "output_type": "ValidationError" },
+      { "from": "idle", "to": "error_storage_write", "event": "CREATE_TASK_STORAGE_FAIL", "action": "reportStorageWriteFailure", "input_type": "TaskInput", "output_type": "StorageWriteError" },
+
+      { "from": "idle", "to": "idle_running", "event": "START_TIMER", "action": "startSessionOnTask", "input_type": "StartTimerInput", "output_type": "Task" },
+      { "from": "idle", "to": "error_task_not_found", "event": "START_TIMER_NOT_FOUND", "action": "reportTaskNotFound", "input_type": "StartTimerInput", "output_type": "TaskNotFoundError" },
+      { "from": "idle", "to": "error_storage_write", "event": "START_TIMER_STORAGE_FAIL", "action": "retryOrRevertStart", "input_type": "StartTimerInput", "output_type": "StorageWriteError" },
+
+      { "from": "idle_running", "to": "idle", "event": "STOP_TIMER", "action": "stopSessionOnTask", "input_type": "StopTimerInput", "output_type": "Task" },
+      { "from": "idle_running", "to": "idle", "event": "STOP_TIMER_NEGATIVE", "action": "clampNegativeAndClose", "input_type": "StopTimerInput", "output_type": "Task" },
+      { "from": "idle_running", "to": "idle_running", "event": "STOP_TIMER_NO_OPEN", "action": "reconcileNoOpenSession", "input_type": "StopTimerInput", "output_type": "NoOpenSessionError" },
+      { "from": "idle_running", "to": "error_storage_write", "event": "STOP_TIMER_STORAGE_FAIL", "action": "retryOrKeepOpen", "input_type": "StopTimerInput", "output_type": "StorageWriteError" },
+
+      { "from": "idle_running", "to": "idle_running", "event": "START_TIMER", "action": "switchRunningTask", "input_type": "StartTimerInput", "output_type": "Task" },
+      { "from": "idle_running", "to": "idle_running", "event": "START_TIMER_SAME", "action": "ignoreAlreadyRunning", "input_type": "StartTimerInput", "output_type": "Task" },
+
+      { "from": "idle_running", "to": "idle_running", "event": "CREATE_TASK_OK", "action": "createTask", "input_type": "TaskInput", "output_type": "Task" },
+      { "from": "idle_running", "to": "error_validation", "event": "CREATE_TASK_INVALID", "action": "rejectInvalidName", "input_type": "TaskInput", "output_type": "ValidationError" },
+
+      { "from": "idle", "to": "idle", "event": "DELETE_TASK_OK", "action": "deleteTask", "input_type": "DeleteTaskInput", "output_type": "DeleteResult" },
+      { "from": "idle", "to": "idle", "event": "DELETE_TASK_CANCELLED", "action": "abortDeleteSilently", "input_type": "DeleteTaskInput", "output_type": "DeleteResult" },
+      { "from": "idle", "to": "error_storage_write", "event": "DELETE_TASK_STORAGE_FAIL", "action": "retryOrRestoreDelete", "input_type": "DeleteTaskInput", "output_type": "StorageWriteError" },
+      { "from": "idle_running", "to": "idle", "event": "DELETE_RUNNING_TASK", "action": "discardOpenAndDelete", "input_type": "DeleteTaskInput", "output_type": "DeleteResult" },
+      { "from": "idle_running", "to": "idle_running", "event": "DELETE_TASK_OK", "action": "deleteTask", "input_type": "DeleteTaskInput", "output_type": "DeleteResult" },
+
+      { "from": "idle", "to": "idle", "event": "TICK", "action": "recomputeTotals", "input_type": "TickInput", "output_type": "TickResult" },
+      { "from": "idle_running", "to": "idle_running", "event": "TICK", "action": "recomputeTotalsWithOpen", "input_type": "TickInput", "output_type": "TickResult" },
+
+      { "from": "error_validation", "to": "idle", "event": "DISMISS_ERROR", "action": "dismissError", "input_type": "DismissInput", "output_type": "IdleSnapshot" },
+      { "from": "error_storage_write", "to": "idle", "event": "DISMISS_ERROR", "action": "dismissError", "input_type": "DismissInput", "output_type": "IdleSnapshot" },
+      { "from": "error_task_not_found", "to": "idle", "event": "DISMISS_ERROR", "action": "refreshTaskList", "input_type": "DismissInput", "output_type": "IdleSnapshot" },
+      { "from": "error_corrupt", "to": "idle", "event": "USER_RESET_CORRUPT", "action": "resetCorruptStorage", "input_type": "DismissInput", "output_type": "IdleSnapshot" },
+      { "from": "error_storage_unavailable", "to": "idle", "event": "DISMISS_ERROR", "action": "acknowledgeMemoryOnly", "input_type": "DismissInput", "output_type": "IdleSnapshot" },
+      { "from": "error_schema_mismatch", "to": "idle", "event": "USER_RESET_SCHEMA", "action": "resetOnSchemaMismatch", "input_type": "DismissInput", "output_type": "IdleSnapshot" }
+    ],
+    "timeouts": []
+  },
+  "types_dir": "src/types",
+  "type_files": [
+    "src/types/task.ts",
+    "src/types/session.ts",
+    "src/types/inputs.ts",
+    "src/types/errors.ts",
+    "src/types/events.ts"
+  ]
+}
