@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --reporter=verbose",
-    "lint": "eslint src --ext .ts"
+    "dev": "bunx --bun vite",
+    "build": "bunx tsc && bunx --bun vite build",
+    "preview": "bunx --bun vite preview",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bunx vitest run --reporter=verbose",
+    "lint": "bunx eslint src --ext .ts"
   },
   "dependencies": {
     "zod": "^3.22.4"
