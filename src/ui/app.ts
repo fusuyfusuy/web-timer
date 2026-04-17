@@ -17,13 +17,11 @@ import {
   createTask,
   rejectInvalidName,
   reportStorageWriteFailure,
-  deleteTask,
   retryOrRestoreDelete,
   discardOpenAndDelete,
 } from '../services/taskService';
 import {
   startSessionOnTask,
-  ignoreAlreadyRunning,
   stopSessionOnTask,
   clampNegativeAndClose,
   reportTaskNotFound,
