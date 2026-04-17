@@ -509,34 +509,34 @@ export function handleStartTimer(taskId: string): void {
     appState.currentState === 'idle_running' &&
     taskId === appState.runningTaskId
   ) {
-    ignoreAlreadyRunning({ taskId, now }, appState.tasks);
-    dispatch({}); // Re-render anyway to ensure sync
+    const updatedTasks = ignoreAlreadyRunning({ taskId, now }, appState.tasks);
+    dispatch({ tasks: updatedTasks });
     return;
   }
 
   try {
-    let updatedTask: Task;
+    let nextTasks: Task[];
 
     if ((appState.currentState === 'idle_running' || appState.currentState === 'idle_paused') && appState.runningTaskId) {
       if (appState.currentState === 'idle_paused') {
         handleStopTimer(appState.runningTaskId);
       }
       if (appState.runningTaskId && appState.runningTaskId !== taskId) {
-        updatedTask = switchRunningTask(
+        nextTasks = switchRunningTask(
           { taskId, now },
           appState.tasks,
           appState.runningTaskId,
         );
       } else {
-        updatedTask = startSessionOnTask({ taskId, now }, appState.tasks);
+        nextTasks = startSessionOnTask({ taskId, now }, appState.tasks);
       }
     } else {
-      updatedTask = startSessionOnTask({ taskId, now }, appState.tasks);
+      nextTasks = startSessionOnTask({ taskId, now }, appState.tasks);
     }
 
     dispatch({
       currentState: 'idle_running',
-      tasks: appState.tasks.map((t) => (t.id === taskId ? updatedTask : t)),
+      tasks: nextTasks,
       runningTaskId: taskId,
       error: null,
     });
@@ -571,10 +571,10 @@ export function handleStartTimer(taskId: string): void {
 export function handlePauseTimer(taskId: string): void {
   const now = Date.now();
   try {
-    const updatedTask = pauseSessionOnTask({ taskId, now }, appState.tasks);
+    const updatedTasks = pauseSessionOnTask({ taskId, now }, appState.tasks);
     dispatch({
       currentState: 'idle_paused',
-      tasks: appState.tasks.map(t => t.id === taskId ? updatedTask : t),
+      tasks: updatedTasks,
       error: null,
     });
   } catch (err) {
@@ -586,10 +586,10 @@ export function handlePauseTimer(taskId: string): void {
 export function handleResumeTimer(taskId: string): void {
   const now = Date.now();
   try {
-    const updatedTask = resumeSessionOnTask({ taskId, now }, appState.tasks);
+    const updatedTasks = resumeSessionOnTask({ taskId, now }, appState.tasks);
     dispatch({
       currentState: 'idle_running',
-      tasks: appState.tasks.map(t => t.id === taskId ? updatedTask : t),
+      tasks: updatedTasks,
       error: null,
     });
     startTickInterval();
@@ -615,17 +615,13 @@ export function handleStopTimer(taskId: string): void {
   }
 
   try {
-    let updatedTask: Task;
+    let updatedTasks: Task[];
 
     if (now < openSession.startedAt) {
-      updatedTask = clampNegativeAndClose({ taskId, now }, appState.tasks);
+      updatedTasks = clampNegativeAndClose({ taskId, now }, appState.tasks);
     } else {
-      updatedTask = stopSessionOnTask({ taskId, now }, appState.tasks);
+      updatedTasks = stopSessionOnTask({ taskId, now }, appState.tasks);
     }
-
-    const updatedTasks = appState.tasks.map((t) =>
-      t.id === taskId ? updatedTask : t,
-    );
 
     dispatch({
       currentState: 'idle',

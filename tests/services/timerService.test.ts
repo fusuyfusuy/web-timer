@@ -10,6 +10,8 @@ import {
   retryOrRevertStart,
   retryOrKeepOpen,
   reconcileNoOpenSession,
+  pauseSessionOnTask,
+  resumeSessionOnTask,
 } from '../../src/services/timerService';
 import type { Task } from '../../src/types/task';
 
@@ -31,8 +33,8 @@ const runningTask: Task = {
 
 describe('startSessionOnTask — START_TIMER (idle → idle_running)', () => {
   it('happy path: appends open session', () => {
-    const updated = startSessionOnTask({ taskId: 't1', now: 1000 }, [idleTask]);
-    expect(updated.sessions).toEqual([{ startedAt: 1000, endedAt: null, pauses: [] }]);
+    const tasks = startSessionOnTask({ taskId: 't1', now: 1000 }, [idleTask]);
+    expect(tasks[0].sessions).toEqual([{ startedAt: 1000, endedAt: null, pauses: [] }]);
   });
 
   it('error path: throws TaskNotFoundError for unknown task', () => {
@@ -42,9 +44,9 @@ describe('startSessionOnTask — START_TIMER (idle → idle_running)', () => {
 
 describe('switchRunningTask — START_TIMER (idle_running → idle_running, different task)', () => {
   it('happy path: closes old open session, starts new one', () => {
-    const updated = switchRunningTask({ taskId: 't1', now: 500 }, [runningTask, idleTask], 't2');
-    expect(updated.id).toBe('t1');
-    expect(updated.sessions).toEqual([{ startedAt: 500, endedAt: null, pauses: [] }]);
+    const tasks = switchRunningTask({ taskId: 't1', now: 500 }, [runningTask, idleTask], 't2');
+    const updatedTarget = tasks.find(t => t.id === 't1')!;
+    expect(updatedTarget.sessions).toEqual([{ startedAt: 500, endedAt: null, pauses: [] }]);
     const persisted = JSON.parse(mock.__store.get('webtimer:state:v1')!);
     const oldTask = persisted.tasks.find((t: Task) => t.id === 't2');
     expect(oldTask.sessions[0].endedAt).toBe(500);
@@ -56,9 +58,9 @@ describe('switchRunningTask — START_TIMER (idle_running → idle_running, diff
 });
 
 describe('ignoreAlreadyRunning — START_TIMER_SAME', () => {
-  it('happy path: returns task unchanged, no write', () => {
+  it('happy path: returns task list unchanged, no write', () => {
     const result = ignoreAlreadyRunning({ taskId: 't2', now: 900 }, [runningTask]);
-    expect(result).toEqual(runningTask);
+    expect(result).toEqual([runningTask]);
     expect(mock.__store.size).toBe(0);
   });
 
@@ -69,8 +71,8 @@ describe('ignoreAlreadyRunning — START_TIMER_SAME', () => {
 
 describe('stopSessionOnTask — STOP_TIMER', () => {
   it('happy path: closes open session', () => {
-    const updated = stopSessionOnTask({ taskId: 't2', now: 500 }, [runningTask]);
-    expect(updated.sessions[0].endedAt).toBe(500);
+    const tasks = stopSessionOnTask({ taskId: 't2', now: 500 }, [runningTask]);
+    expect(tasks[0].sessions[0].endedAt).toBe(500);
   });
 
   it('error path: throws NoOpenSessionError when no open session', () => {
@@ -81,12 +83,34 @@ describe('stopSessionOnTask — STOP_TIMER', () => {
 
 describe('clampNegativeAndClose — STOP_TIMER_NEGATIVE', () => {
   it('happy path: clamps endedAt to startedAt', () => {
-    const updated = clampNegativeAndClose({ taskId: 't2', now: 50 }, [runningTask]);
-    expect(updated.sessions[0].endedAt).toBe(100);
+    const tasks = clampNegativeAndClose({ taskId: 't2', now: 50 }, [runningTask]);
+    expect(tasks[0].sessions[0].endedAt).toBe(100);
   });
 
   it('error path: throws when no open session', () => {
     expect(() => clampNegativeAndClose({ taskId: 't1', now: 50 }, [idleTask])).toThrow();
+  });
+});
+
+describe('pauseSessionOnTask — PAUSE_TIMER', () => {
+  it('happy path: adds pause interval', () => {
+    const tasks = pauseSessionOnTask({ taskId: 't2', now: 150 }, [runningTask]);
+    const pauses = tasks[0].sessions[0].pauses!;
+    expect(pauses).toHaveLength(1);
+    expect(pauses[0].pausedAt).toBe(150);
+    expect(pauses[0].resumedAt).toBeNull();
+  });
+});
+
+describe('resumeSessionOnTask — RESUME_TIMER', () => {
+  it('happy path: closes pause interval', () => {
+    const pausedTask: Task = {
+      ...runningTask,
+      sessions: [{ ...runningTask.sessions[0], pauses: [{ pausedAt: 120, resumedAt: null }] }]
+    };
+    const tasks = resumeSessionOnTask({ taskId: 't2', now: 180 }, [pausedTask]);
+    const pauses = tasks[0].sessions[0].pauses!;
+    expect(pauses[0].resumedAt).toBe(180);
   });
 });
 

@@ -9,7 +9,7 @@ import { PERSISTED_SCHEMA_VERSION } from '../types/task';
 import { writePersistedState } from '../storage/localStorageAdapter';
 import { getOpenSession } from '../lib/time';
 
-export function startSessionOnTask(input: StartTimerInput, currentTasks: Task[]): Task {
+export function startSessionOnTask(input: StartTimerInput, currentTasks: Task[]): Task[] {
   const task = currentTasks.find(t => t.id === input.taskId);
   if (!task) {
     throw { kind: 'TaskNotFound', taskId: input.taskId, message: `Task ${input.taskId} not found` } as TaskNotFoundError;
@@ -27,14 +27,14 @@ export function startSessionOnTask(input: StartTimerInput, currentTasks: Task[])
     throw result.error;
   }
 
-  return updatedTask;
+  return updatedTasks;
 }
 
 export function switchRunningTask(
   input: StartTimerInput,
   currentTasks: Task[],
   runningTaskId: string,
-): Task {
+): Task[] {
   const runningTask = currentTasks.find(t => t.id === runningTaskId);
   if (!runningTask) {
     throw { kind: 'TaskNotFound', taskId: runningTaskId, message: `Running task ${runningTaskId} not found` } as TaskNotFoundError;
@@ -72,20 +72,20 @@ export function switchRunningTask(
     throw result.error;
   }
 
-  return updatedTargetTask;
+  return updatedTasks;
 }
 
-export function ignoreAlreadyRunning(input: StartTimerInput, currentTasks: Task[]): Task {
+export function ignoreAlreadyRunning(input: StartTimerInput, currentTasks: Task[]): Task[] {
   const task = currentTasks.find(t => t.id === input.taskId);
   if (!task) {
     throw { kind: 'TaskNotFound', taskId: input.taskId, message: `Task ${input.taskId} not found` } as TaskNotFoundError;
   }
 
   console.warn(`Start called on already-running task: ${input.taskId}`);
-  return task;
+  return currentTasks;
 }
 
-export function stopSessionOnTask(input: StopTimerInput, currentTasks: Task[]): Task {
+export function stopSessionOnTask(input: StopTimerInput, currentTasks: Task[]): Task[] {
   const task = currentTasks.find(t => t.id === input.taskId);
   if (!task) {
     throw { kind: 'TaskNotFound', taskId: input.taskId, message: `Task ${input.taskId} not found` } as TaskNotFoundError;
@@ -108,10 +108,10 @@ export function stopSessionOnTask(input: StopTimerInput, currentTasks: Task[]): 
     throw result.error;
   }
 
-  return updatedTask;
+  return updatedTasks;
 }
 
-export function clampNegativeAndClose(input: StopTimerInput, currentTasks: Task[]): Task {
+export function clampNegativeAndClose(input: StopTimerInput, currentTasks: Task[]): Task[] {
   const task = currentTasks.find(t => t.id === input.taskId);
   if (!task) {
     throw { kind: 'TaskNotFound', taskId: input.taskId, message: `Task ${input.taskId} not found` } as TaskNotFoundError;
@@ -136,10 +136,10 @@ export function clampNegativeAndClose(input: StopTimerInput, currentTasks: Task[
     throw result.error;
   }
 
-  return updatedTask;
+  return updatedTasks;
 }
 
-export function pauseSessionOnTask(input: StopTimerInput, currentTasks: Task[]): Task {
+export function pauseSessionOnTask(input: StopTimerInput, currentTasks: Task[]): Task[] {
   const task = currentTasks.find(t => t.id === input.taskId);
   if (!task) {
     throw { kind: 'TaskNotFound', taskId: input.taskId, message: `Task ${input.taskId} not found` } as TaskNotFoundError;
@@ -165,10 +165,10 @@ export function pauseSessionOnTask(input: StopTimerInput, currentTasks: Task[]):
     throw result.error;
   }
 
-  return updatedTask;
+  return updatedTasks;
 }
 
-export function resumeSessionOnTask(input: StopTimerInput, currentTasks: Task[]): Task {
+export function resumeSessionOnTask(input: StopTimerInput, currentTasks: Task[]): Task[] {
   const task = currentTasks.find(t => t.id === input.taskId);
   if (!task) {
     throw { kind: 'TaskNotFound', taskId: input.taskId, message: `Task ${input.taskId} not found` } as TaskNotFoundError;
@@ -194,7 +194,7 @@ export function resumeSessionOnTask(input: StopTimerInput, currentTasks: Task[])
     throw result.error;
   }
 
-  return updatedTask;
+  return updatedTasks;
 }
 
 export function reportTaskNotFound(input: StartTimerInput): TaskNotFoundError {
