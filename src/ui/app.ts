@@ -269,7 +269,6 @@ export function renderApp(state: AppState): void {
 }
 
 export function updateTaskRow(row: HTMLElement, view: TaskView): void {
-  const now = Date.now();
   const task = appState.tasks.find((t) => t.id === view.id);
 
   // Update classes
@@ -819,7 +818,7 @@ export function renderFullscreen(container: HTMLElement, view: TaskView): void {
   if (timer) timer.textContent = view.formattedTotal;
 
   const actionsEl = container.querySelector('.task-actions');
-  if (actionsEl) {
+  if (actionsEl instanceof HTMLElement) {
     const stateKey = `${view.isRunning}-${view.isPaused}`;
     if (actionsEl.dataset.stateKey !== stateKey) {
       actionsEl.innerHTML = '';
