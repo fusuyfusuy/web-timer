@@ -1,6 +1,4 @@
-// app.ts — DOM rendering controller. Dispatches user events into services and re-renders on state change.
-
-import type { Task, TaskView } from '../types/task';
+import type { Task, TaskView, TimerMode } from '../types/task';
 import type { AppError } from '../types/errors';
 import type { StateName } from '../types/events';
 import { TaskNameSchema } from '../types/task';
@@ -36,9 +34,11 @@ import {
   retryOrRevertStart,
   retryOrKeepOpen,
   reconcileNoOpenSession,
+  pauseSessionOnTask,
+  resumeSessionOnTask,
 } from '../services/timerService';
 import { recomputeTotals, recomputeTotalsWithOpen } from '../services/tickService';
-import { getOpenSession } from '../lib/time';
+import { getOpenSession, isPaused } from '../lib/time';
 
 export interface AppState {
   currentState: StateName;
@@ -55,6 +55,7 @@ let appState: AppState = {
 };
 
 let tickIntervalId: number | null = null;
+let selectedMode: TimerMode = 'countup';
 
 export function initApp(): void {
   if (!isStorageAvailable()) {
@@ -152,8 +153,10 @@ export function initApp(): void {
     };
   } else if (tasksWithOpen.length === 1) {
     hydrateResult = resumeOpenSession({ now: Date.now(), rawStorage });
+    const taskWithOpen = tasksWithOpen[0];
+    const paused = isPaused(taskWithOpen);
     appState = {
-      currentState: 'idle_running',
+      currentState: paused ? 'idle_paused' : 'idle_running',
       tasks: hydrateResult.tasks,
       runningTaskId: hydrateResult.runningTaskId,
       error: null,
@@ -181,7 +184,7 @@ export function renderApp(state: AppState): void {
   const now = Date.now();
 
   let views: TaskView[];
-  if (state.currentState === 'idle_running' && state.runningTaskId !== null) {
+  if ((state.currentState === 'idle_running' || state.currentState === 'idle_paused') && state.runningTaskId !== null) {
     const tickResult = recomputeTotalsWithOpen(
       { now },
       state.tasks,
@@ -196,75 +199,134 @@ export function renderApp(state: AppState): void {
   const taskListContainer = document.getElementById('task-list');
   if (taskListContainer) {
     taskListContainer.innerHTML = '';
-    for (const view of views) {
-      const row = renderTaskRow(view, view.isRunning);
-      taskListContainer.appendChild(row);
+    if (views.length === 0) {
+      const empty = document.createElement('li');
+      empty.className = 'empty-state';
+      empty.textContent = 'No tasks yet. Create one above.';
+      taskListContainer.appendChild(empty);
+    } else {
+      for (const view of views) {
+        const row = renderTaskRow(view);
+        taskListContainer.appendChild(row);
+      }
     }
   }
 
   const errorBanner = document.getElementById('error-banner');
   const errorMessage = document.getElementById('error-message');
   if (state.error !== null) {
-    if (errorBanner) {
-      errorBanner.hidden = false;
-    }
-    if (errorMessage) {
-      errorMessage.textContent = state.error.message;
-    }
+    if (errorBanner) errorBanner.hidden = false;
+    if (errorMessage) errorMessage.textContent = state.error.message;
   } else {
-    if (errorBanner) {
-      errorBanner.hidden = true;
-    }
+    if (errorBanner) errorBanner.hidden = true;
   }
 
   const addTaskSubmit = document.getElementById('add-task-btn');
   if (addTaskSubmit && addTaskSubmit instanceof HTMLButtonElement) {
-    if (
+    addTaskSubmit.disabled =
       state.currentState === 'error_validation' ||
-      state.currentState === 'error_storage_write'
-    ) {
-      addTaskSubmit.disabled = true;
-    } else {
-      addTaskSubmit.disabled = false;
-    }
+      state.currentState === 'error_storage_write';
   }
+
+  checkScheduledTasks(now);
 }
 
-export function renderTaskRow(view: TaskView, isRunning: boolean): HTMLElement {
+export function renderTaskRow(view: TaskView): HTMLElement {
   const row = document.createElement('li');
   row.dataset.taskId = view.id;
+  row.className = 'task-card';
 
-  const nameSpan = document.createElement('span');
-  nameSpan.textContent = view.name;
-  nameSpan.style.marginRight = '10px';
+  if (view.isRunning && !view.isPaused) row.classList.add('running');
+  if (view.isPaused) row.classList.add('paused');
+  if (view.isCountdown) row.classList.add('countdown');
+  if (view.isExpired) row.classList.add('expired');
 
-  const totalSpan = document.createElement('span');
-  totalSpan.textContent = view.formattedTotal;
-  totalSpan.style.marginRight = '10px';
+  const task = appState.tasks.find(t => t.id === view.id);
+  if (task?.scheduledStartAt && task.scheduledStartAt > Date.now() && !view.isRunning) {
+    row.classList.add('scheduled');
+  }
 
-  const toggleButton = document.createElement('button');
-  toggleButton.textContent = isRunning ? 'Stop' : 'Start';
-  toggleButton.type = 'button';
-  toggleButton.style.marginRight = '5px';
-  toggleButton.addEventListener('click', () => {
-    if (isRunning) {
-      handleStopTimer(view.id);
-    } else {
-      handleStartTimer(view.id);
-    }
-  });
+  const info = document.createElement('div');
+  info.className = 'task-info';
 
-  const deleteButton = document.createElement('button');
-  deleteButton.textContent = 'Delete';
-  deleteButton.type = 'button';
-  deleteButton.addEventListener('click', () => {
-    handleDeleteTask(view.id);
-  });
+  const name = document.createElement('div');
+  name.className = 'task-name';
+  name.textContent = view.name;
 
-  row.appendChild(nameSpan);
-  row.appendChild(totalSpan);
-  row.appendChild(toggleButton);
-  row.appendChild(deleteButton);
+  const meta = document.createElement('div');
+  meta.className = 'task-meta';
+  if (view.isCountdown) {
+    meta.textContent = view.isExpired ? "Time's up!" : 'Countdown';
+  } else if (view.isPaused) {
+    meta.textContent = 'Paused';
+  } else if (view.isRunning) {
+    meta.textContent = 'Running';
+  }
+
+  if (task?.scheduledStartAt && task.scheduledStartAt > Date.now() && !view.isRunning) {
+    const dt = new Date(task.scheduledStartAt);
+    meta.textContent = `Starts at ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  info.appendChild(name);
+  info.appendChild(meta);
+
+  const timer = document.createElement('div');
+  timer.className = 'task-timer';
+  timer.textContent = view.formattedTotal;
+
+  const actions = document.createElement('div');
+  actions.className = 'task-actions';
+
+  if (view.isPaused) {
+    const resumeBtn = document.createElement('button');
+    resumeBtn.className = 'action-btn resume';
+    resumeBtn.textContent = 'Resume';
+    resumeBtn.type = 'button';
+    resumeBtn.addEventListener('click', () => handleResumeTimer(view.id));
+
+    const stopBtn = document.createElement('button');
+    stopBtn.className = 'action-btn stop';
+    stopBtn.textContent = 'Stop';
+    stopBtn.type = 'button';
+    stopBtn.addEventListener('click', () => handleStopTimer(view.id));
+
+    actions.appendChild(resumeBtn);
+    actions.appendChild(stopBtn);
+  } else if (view.isRunning) {
+    const pauseBtn = document.createElement('button');
+    pauseBtn.className = 'action-btn pause';
+    pauseBtn.textContent = 'Pause';
+    pauseBtn.type = 'button';
+    pauseBtn.addEventListener('click', () => handlePauseTimer(view.id));
+
+    const stopBtn = document.createElement('button');
+    stopBtn.className = 'action-btn stop';
+    stopBtn.textContent = 'Stop';
+    stopBtn.type = 'button';
+    stopBtn.addEventListener('click', () => handleStopTimer(view.id));
+
+    actions.appendChild(pauseBtn);
+    actions.appendChild(stopBtn);
+  } else {
+    const startBtn = document.createElement('button');
+    startBtn.className = 'action-btn start';
+    startBtn.textContent = 'Start';
+    startBtn.type = 'button';
+    startBtn.addEventListener('click', () => handleStartTimer(view.id));
+    actions.appendChild(startBtn);
+  }
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'action-btn delete';
+  deleteBtn.textContent = '\u00d7';
+  deleteBtn.type = 'button';
+  deleteBtn.addEventListener('click', () => handleDeleteTask(view.id));
+  actions.appendChild(deleteBtn);
+
+  row.appendChild(info);
+  row.appendChild(timer);
+  row.appendChild(actions);
 
   return row;
 }
@@ -282,19 +344,46 @@ export function handleCreateTask(nameInput: string): void {
     return;
   }
 
+  const hoursEl = document.getElementById('cd-hours') as HTMLInputElement | null;
+  const minsEl = document.getElementById('cd-minutes') as HTMLInputElement | null;
+  const secsEl = document.getElementById('cd-seconds') as HTMLInputElement | null;
+  const startEl = document.getElementById('scheduled-start') as HTMLInputElement | null;
+  const endEl = document.getElementById('scheduled-end') as HTMLInputElement | null;
+
+  let countdownDurationMs: number | null = null;
+  if (selectedMode === 'countdown') {
+    const h = parseInt(hoursEl?.value || '0', 10) || 0;
+    const m = parseInt(minsEl?.value || '0', 10) || 0;
+    const s = parseInt(secsEl?.value || '0', 10) || 0;
+    countdownDurationMs = ((h * 3600) + (m * 60) + s) * 1000;
+    if (countdownDurationMs <= 0) countdownDurationMs = 5 * 60 * 1000;
+  }
+
+  const scheduledStartAt = startEl?.value ? new Date(startEl.value).getTime() : null;
+  const scheduledEndAt = endEl?.value ? new Date(endEl.value).getTime() : null;
+
   try {
     const newTask = createTask({ name: nameInput }, appState.tasks);
+    const taskWithOptions: Task = {
+      ...newTask,
+      timerMode: selectedMode,
+      countdownDurationMs,
+      scheduledStartAt,
+      scheduledEndAt,
+    };
+
     appState = {
       ...appState,
-      currentState: appState.currentState === 'idle_running' ? 'idle_running' : 'idle',
-      tasks: [newTask, ...appState.tasks],
+      currentState: appState.currentState === 'idle_running' || appState.currentState === 'idle_paused'
+        ? appState.currentState : 'idle',
+      tasks: [taskWithOptions, ...appState.tasks.filter(t => t.id !== newTask.id)],
       error: null,
     };
 
     const inputEl = document.getElementById('task-name-input');
-    if (inputEl && inputEl instanceof HTMLInputElement) {
-      inputEl.value = '';
-    }
+    if (inputEl && inputEl instanceof HTMLInputElement) inputEl.value = '';
+    if (startEl) startEl.value = '';
+    if (endEl) endEl.value = '';
 
     renderApp(appState);
   } catch (err) {
@@ -323,12 +412,19 @@ export function handleStartTimer(taskId: string): void {
   try {
     let updatedTask: Task;
 
-    if (appState.currentState === 'idle_running' && appState.runningTaskId) {
-      updatedTask = switchRunningTask(
-        { taskId, now },
-        appState.tasks,
-        appState.runningTaskId,
-      );
+    if ((appState.currentState === 'idle_running' || appState.currentState === 'idle_paused') && appState.runningTaskId) {
+      if (appState.currentState === 'idle_paused') {
+        handleStopTimer(appState.runningTaskId);
+      }
+      if (appState.runningTaskId && appState.runningTaskId !== taskId) {
+        updatedTask = switchRunningTask(
+          { taskId, now },
+          appState.tasks,
+          appState.runningTaskId,
+        );
+      } else {
+        updatedTask = startSessionOnTask({ taskId, now }, appState.tasks);
+      }
     } else {
       updatedTask = startSessionOnTask({ taskId, now }, appState.tasks);
     }
@@ -337,6 +433,7 @@ export function handleStartTimer(taskId: string): void {
       ...appState,
       currentState: 'idle_running',
       tasks: appState.tasks.map((t) => (t.id === taskId ? updatedTask : t)),
+      runningTaskId: taskId,
       error: null,
     };
 
@@ -367,6 +464,43 @@ export function handleStartTimer(taskId: string): void {
         error,
       };
     }
+    renderApp(appState);
+  }
+}
+
+export function handlePauseTimer(taskId: string): void {
+  const now = Date.now();
+  try {
+    const updatedTask = pauseSessionOnTask({ taskId, now }, appState.tasks);
+    appState = {
+      ...appState,
+      currentState: 'idle_paused',
+      tasks: appState.tasks.map(t => t.id === taskId ? updatedTask : t),
+      error: null,
+    };
+    renderApp(appState);
+  } catch (err) {
+    const error = retryOrKeepOpen({ taskId, now }, appState.tasks, err);
+    appState = { ...appState, currentState: 'error_storage_write', error };
+    renderApp(appState);
+  }
+}
+
+export function handleResumeTimer(taskId: string): void {
+  const now = Date.now();
+  try {
+    const updatedTask = resumeSessionOnTask({ taskId, now }, appState.tasks);
+    appState = {
+      ...appState,
+      currentState: 'idle_running',
+      tasks: appState.tasks.map(t => t.id === taskId ? updatedTask : t),
+      error: null,
+    };
+    startTickInterval();
+    renderApp(appState);
+  } catch (err) {
+    const error = retryOrKeepOpen({ taskId, now }, appState.tasks, err);
+    appState = { ...appState, currentState: 'error_storage_write', error };
     renderApp(appState);
   }
 }
@@ -474,10 +608,28 @@ export function handleDeleteTask(taskId: string): void {
   }
 }
 
+function checkScheduledTasks(now: number): void {
+  for (const task of appState.tasks) {
+    if (task.scheduledStartAt && task.scheduledStartAt <= now && !appState.runningTaskId) {
+      const hasAnySessions = task.sessions.length > 0;
+      if (!hasAnySessions) {
+        task.scheduledStartAt = null;
+        handleStartTimer(task.id);
+        return;
+      }
+    }
+    if (task.scheduledEndAt && task.scheduledEndAt <= now && appState.runningTaskId === task.id) {
+      task.scheduledEndAt = null;
+      handleStopTimer(task.id);
+      return;
+    }
+  }
+}
+
 function startTickInterval(): void {
   if (tickIntervalId === null) {
     tickIntervalId = window.setInterval(() => {
-      if (appState.currentState === 'idle_running') {
+      if (appState.currentState === 'idle_running' || appState.currentState === 'idle_paused') {
         renderApp(appState);
       }
     }, 1000);
@@ -502,6 +654,18 @@ function bindEventListeners(): void {
       }
     });
   }
+
+  const modeBtns = document.querySelectorAll('.mode-btn');
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = (btn as HTMLElement).dataset.mode as TimerMode;
+      selectedMode = mode;
+      modeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const cdSettings = document.getElementById('countdown-settings');
+      if (cdSettings) cdSettings.hidden = mode !== 'countdown';
+    });
+  });
 
   const dismissBtn = document.getElementById('dismiss-error-btn');
   if (dismissBtn) {

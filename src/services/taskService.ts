@@ -17,6 +17,10 @@ export function createTask(input: TaskInput, currentTasks: Task[]): Task {
     name: trimmedName,
     createdAt: Date.now(),
     sessions: [],
+    timerMode: 'countup',
+    countdownDurationMs: null,
+    scheduledStartAt: null,
+    scheduledEndAt: null,
   };
 
   const updatedTasks = [newTask, ...currentTasks];

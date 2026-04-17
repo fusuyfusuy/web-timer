@@ -46,7 +46,9 @@ export function parsePersistedState(raw: string):
 
   if (typeof parsed === 'object' && parsed !== null && 'schemaVersion' in parsed) {
     const schemaVersion = (parsed as Record<string, unknown>).schemaVersion;
-    if (schemaVersion !== PERSISTED_SCHEMA_VERSION) {
+    if (schemaVersion === 1) {
+      (parsed as Record<string, unknown>).schemaVersion = PERSISTED_SCHEMA_VERSION;
+    } else if (schemaVersion !== PERSISTED_SCHEMA_VERSION) {
       return {
         ok: false,
         error: {

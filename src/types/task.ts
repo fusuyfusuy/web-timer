@@ -1,9 +1,8 @@
-// Task — a user-created unit of work owning a list of timer Sessions.
 import { z } from "zod";
 import { SessionSchema, type Session } from "./session";
 
 export const TASK_NAME_MAX_LENGTH = 200;
-export const PERSISTED_SCHEMA_VERSION = 1;
+export const PERSISTED_SCHEMA_VERSION = 2;
 export const STORAGE_KEY = "webtimer:state:v1";
 export const STORAGE_BACKUP_KEY = "webtimer:state:backup";
 
@@ -16,11 +15,18 @@ export const TaskNameSchema = z
   .min(1, { message: "Task name must be non-empty" })
   .max(TASK_NAME_MAX_LENGTH, { message: `Task name must be <= ${TASK_NAME_MAX_LENGTH} chars` });
 
+export const TimerModeSchema = z.enum(["countup", "countdown"]);
+export type TimerMode = z.infer<typeof TimerModeSchema>;
+
 export const TaskSchema = z.object({
   id: TaskIdSchema,
   name: TaskNameSchema,
   createdAt: z.number().int().nonnegative(),
   sessions: z.array(SessionSchema),
+  timerMode: TimerModeSchema.default("countup"),
+  countdownDurationMs: z.number().int().nonnegative().nullable().default(null),
+  scheduledStartAt: z.number().int().nonnegative().nullable().default(null),
+  scheduledEndAt: z.number().int().nonnegative().nullable().default(null),
 });
 export type Task = z.infer<typeof TaskSchema>;
 
@@ -35,8 +41,12 @@ export interface TaskView {
   name: string;
   createdAt: number;
   isRunning: boolean;
+  isPaused: boolean;
+  isCountdown: boolean;
+  isExpired: boolean;
   totalMs: number;
-  formattedTotal: string; // HH:MM:SS
+  remainingMs: number | null;
+  formattedTotal: string;
 }
 
 export type { Session };

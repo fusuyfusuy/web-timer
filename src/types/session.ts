@@ -1,11 +1,16 @@
-// Session — a single timed interval attached to a Task.
-// Open if endedAt is null; closed otherwise with endedAt >= startedAt.
 import { z } from "zod";
+
+export const PauseIntervalSchema = z.object({
+  pausedAt: z.number().int().nonnegative(),
+  resumedAt: z.number().int().nonnegative().nullable(),
+});
+export type PauseInterval = z.infer<typeof PauseIntervalSchema>;
 
 export const SessionSchema = z
   .object({
     startedAt: z.number().int().nonnegative(),
     endedAt: z.number().int().nonnegative().nullable(),
+    pauses: z.array(PauseIntervalSchema).default([]),
   })
   .refine(
     (s) => s.endedAt === null || s.endedAt >= s.startedAt,
@@ -22,5 +27,6 @@ export type OpenSession = z.infer<typeof OpenSessionSchema>;
 export const ClosedSessionSchema = z.object({
   startedAt: z.number().int().nonnegative(),
   endedAt: z.number().int().nonnegative(),
+  pauses: z.array(PauseIntervalSchema).default([]),
 });
 export type ClosedSession = z.infer<typeof ClosedSessionSchema>;

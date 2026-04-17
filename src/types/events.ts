@@ -5,6 +5,7 @@ export const StateNameSchema = z.enum([
   "booting",
   "idle",
   "idle_running",
+  "idle_paused",
   "error_validation",
   "error_storage_write",
   "error_task_not_found",
@@ -31,6 +32,9 @@ export const EventNameSchema = z.enum([
   "START_TIMER_NOT_FOUND",
   "START_TIMER_SAME",
   "START_TIMER_STORAGE_FAIL",
+  // pause / resume
+  "PAUSE_TIMER",
+  "RESUME_TIMER",
   // stop
   "STOP_TIMER",
   "STOP_TIMER_NEGATIVE",

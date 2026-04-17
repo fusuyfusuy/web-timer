@@ -4,35 +4,69 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Web Timer</title>
+    <link rel="stylesheet" href="/src/styles/main.css" />
   </head>
   <body>
     <div id="app">
-      <header>
+      <header class="app-header">
         <h1>Web Timer</h1>
       </header>
 
-      <section id="create-task-section">
-        <form id="create-task-form">
+      <section id="create-task-section" class="create-section">
+        <form id="create-task-form" class="create-form">
           <input
             type="text"
             id="task-name-input"
-            placeholder="New task name…"
+            class="task-input"
+            placeholder="New task name..."
             maxlength="200"
             autocomplete="off"
           />
-          <button type="submit" id="add-task-btn">Add Task</button>
+          <div class="create-options">
+            <div class="mode-toggle">
+              <button type="button" id="mode-countup" class="mode-btn active" data-mode="countup">Count Up</button>
+              <button type="button" id="mode-countdown" class="mode-btn" data-mode="countdown">Countdown</button>
+            </div>
+            <div id="countdown-settings" class="countdown-settings" hidden>
+              <div class="duration-picker">
+                <input type="number" id="cd-hours" class="duration-input" min="0" max="99" value="0" placeholder="H" />
+                <span class="duration-sep">:</span>
+                <input type="number" id="cd-minutes" class="duration-input" min="0" max="59" value="5" placeholder="M" />
+                <span class="duration-sep">:</span>
+                <input type="number" id="cd-seconds" class="duration-input" min="0" max="59" value="0" placeholder="S" />
+              </div>
+            </div>
+            <div id="schedule-settings" class="schedule-settings">
+              <details class="schedule-details">
+                <summary>Schedule</summary>
+                <div class="schedule-fields">
+                  <label>
+                    <span>Start at</span>
+                    <input type="datetime-local" id="scheduled-start" class="schedule-input" />
+                  </label>
+                  <label>
+                    <span>End at</span>
+                    <input type="datetime-local" id="scheduled-end" class="schedule-input" />
+                  </label>
+                </div>
+              </details>
+            </div>
+          </div>
+          <button type="submit" id="add-task-btn" class="add-btn">Add</button>
         </form>
-        <p id="validation-error" class="error" hidden></p>
+        <p id="validation-error" class="validation-error" hidden></p>
       </section>
 
-      <section id="error-banner" hidden>
+      <section id="error-banner" class="error-banner" hidden>
         <p id="error-message"></p>
-        <button id="dismiss-error-btn">Dismiss</button>
-        <button id="reset-storage-btn" hidden>Reset Data</button>
+        <div class="error-actions">
+          <button id="dismiss-error-btn" class="btn btn-ghost">Dismiss</button>
+          <button id="reset-storage-btn" class="btn btn-danger" hidden>Reset Data</button>
+        </div>
       </section>
 
-      <section id="task-list-section">
-        <ul id="task-list"></ul>
+      <section id="task-list-section" class="task-list-section">
+        <ul id="task-list" class="task-list"></ul>
       </section>
     </div>
     <script type="module" src="/src/main.ts"></script>

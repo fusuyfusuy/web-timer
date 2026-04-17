@@ -21,11 +21,17 @@ stateDiagram-v2
     idle_running --> idle_running: STOP_TIMER_NO_OPEN / reconcileNoOpenSession (StopTimerInput -> NoOpenSessionError)
     idle_running --> error_storage_write: STOP_TIMER_STORAGE_FAIL / retryOrKeepOpen (StopTimerInput -> StorageWriteError)
 
+    idle_running --> idle_paused: PAUSE_TIMER / pauseSessionOnTask (StopTimerInput -> Task)
+    idle_paused --> idle_running: RESUME_TIMER / resumeSessionOnTask (StopTimerInput -> Task)
+    idle_paused --> idle: STOP_TIMER / stopSessionOnTask (StopTimerInput -> Task)
+    idle_paused --> idle_paused: TICK / recomputeTotalsWithOpen (TickInput -> TickResult)
+
     idle_running --> idle_running: START_TIMER / switchRunningTask (StartTimerInput -> Task)
     idle_running --> idle_running: START_TIMER_SAME / ignoreAlreadyRunning (StartTimerInput -> Task)
 
     idle_running --> idle_running: CREATE_TASK_OK / createTask (TaskInput -> Task)
     idle_running --> error_validation: CREATE_TASK_INVALID / rejectInvalidName (TaskInput -> ValidationError)
+    idle_paused --> idle_paused: CREATE_TASK_OK / createTask (TaskInput -> Task)
 
     idle --> idle: DELETE_TASK_OK / deleteTask (DeleteTaskInput -> DeleteResult)
     idle --> idle: DELETE_TASK_CANCELLED / abortDeleteSilently (DeleteTaskInput -> DeleteResult)

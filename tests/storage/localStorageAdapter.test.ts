@@ -72,7 +72,7 @@ describe('writePersistedState', () => {
   it('happy path: writes serialised blob', () => {
     const r = writePersistedState({ schemaVersion: PERSISTED_SCHEMA_VERSION, tasks: [] });
     expect(r.ok).toBe(true);
-    expect(mock.__store.get(STORAGE_KEY)).toContain('"schemaVersion":1');
+    expect(mock.__store.get(STORAGE_KEY)).toContain(`"schemaVersion":${PERSISTED_SCHEMA_VERSION}`);
   });
 
   it('error path: StorageQuotaExceeded surfaced', () => {
