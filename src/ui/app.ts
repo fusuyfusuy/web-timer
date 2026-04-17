@@ -9,11 +9,9 @@ import {
 } from '../storage/localStorageAdapter';
 import {
   hydrateTasks,
-  resumeOpenSession,
   stashCorruptAndPrompt,
   startMemoryOnly,
   promptMigrationReset,
-  reconcileMultipleOpenSessions,
 } from '../services/bootService';
 import {
   createTask,
@@ -25,7 +23,6 @@ import {
 } from '../services/taskService';
 import {
   startSessionOnTask,
-  switchRunningTask,
   ignoreAlreadyRunning,
   stopSessionOnTask,
   clampNegativeAndClose,
@@ -36,15 +33,14 @@ import {
   pauseSessionOnTask,
   resumeSessionOnTask,
 } from '../services/timerService';
-import { recomputeTotals, recomputeTotalsWithOpen } from '../services/tickService';
-import { getOpenSession, isPaused } from '../lib/time';
+import { recomputeViews } from '../services/tickService';
+import { getOpenSession } from '../lib/time';
 
 import { DOM_IDS, STORAGE_KEYS } from './constants';
 
 export interface AppState {
   currentState: StateName;
   tasks: Task[];
-  runningTaskId: string | null;
   fullscreenTaskId: string | null;
   deletingTaskId: string | null;
   error: AppError | null;
@@ -53,7 +49,6 @@ export interface AppState {
 let appState: AppState = {
   currentState: 'booting',
   tasks: [],
-  runningTaskId: null,
   fullscreenTaskId: null,
   deletingTaskId: null,
   error: null,
@@ -77,7 +72,6 @@ export function initApp(): void {
     dispatch({
       currentState: 'error_storage_unavailable',
       tasks: [],
-      runningTaskId: null,
       error: {
         kind: 'StorageUnavailable',
         message: memResult.warning,
@@ -92,7 +86,6 @@ export function initApp(): void {
     dispatch({
       currentState: 'error_storage_unavailable',
       tasks: [],
-      runningTaskId: null,
       error: readResult.error,
     });
     bindEventListeners();
@@ -106,7 +99,6 @@ export function initApp(): void {
     dispatch({
       currentState: 'idle',
       tasks: hydrateResult.tasks,
-      runningTaskId: hydrateResult.runningTaskId,
       error: null,
     });
     bindEventListeners();
@@ -123,7 +115,6 @@ export function initApp(): void {
       dispatch({
         currentState: 'error_schema_mismatch',
         tasks: [],
-        runningTaskId: null,
         error: {
           kind: 'SchemaVersionMismatch',
           message: schemaMismatchResult.promptMessage,
@@ -137,7 +128,6 @@ export function initApp(): void {
       dispatch({
         currentState: 'error_corrupt',
         tasks: [],
-        runningTaskId: null,
         error: {
           kind: 'CorruptStorageData',
           message: corruptResult.promptMessage,
@@ -148,41 +138,14 @@ export function initApp(): void {
     return;
   }
 
-  const tasksWithOpen = parseResult.state.tasks.filter(
-    (t) => t.sessions.some((s) => s.endedAt === null),
-  );
+  const hydrateResult = hydrateTasks({ now: Date.now(), rawStorage });
+  dispatch({
+    currentState: 'idle',
+    tasks: hydrateResult.tasks,
+    error: null,
+  });
 
-  let hydrateResult;
-  if (tasksWithOpen.length === 0) {
-    hydrateResult = hydrateTasks({ now: Date.now(), rawStorage });
-    dispatch({
-      currentState: 'idle',
-      tasks: hydrateResult.tasks,
-      runningTaskId: hydrateResult.runningTaskId,
-      error: null,
-    });
-  } else if (tasksWithOpen.length === 1) {
-    hydrateResult = resumeOpenSession({ now: Date.now(), rawStorage });
-    const taskWithOpen = tasksWithOpen[0];
-    const paused = isPaused(taskWithOpen);
-    dispatch({
-      currentState: paused ? 'idle_paused' : 'idle_running',
-      tasks: hydrateResult.tasks,
-      runningTaskId: hydrateResult.runningTaskId,
-      error: null,
-    });
-    startTickInterval();
-  } else {
-    hydrateResult = reconcileMultipleOpenSessions({
-      now: Date.now(),
-      rawStorage,
-    });
-    dispatch({
-      currentState: 'idle_running',
-      tasks: hydrateResult.tasks,
-      runningTaskId: hydrateResult.runningTaskId,
-      error: null,
-    });
+  if (hydrateResult.hasActive) {
     startTickInterval();
   }
 
@@ -191,19 +154,8 @@ export function initApp(): void {
 
 export function renderApp(state: AppState): void {
   const now = Date.now();
-
-  let views: TaskView[];
-  if ((state.currentState === 'idle_running' || state.currentState === 'idle_paused') && state.runningTaskId !== null) {
-    const tickResult = recomputeTotalsWithOpen(
-      { now },
-      state.tasks,
-      state.runningTaskId,
-    );
-    views = tickResult.views;
-  } else {
-    const tickResult = recomputeTotals({ now }, state.tasks);
-    views = tickResult.views;
-  }
+  const tickResult = recomputeViews({ now }, state.tasks);
+  const views = tickResult.views;
 
   const taskListContainer = document.getElementById(DOM_IDS.TASK_LIST);
   const fullscreenContainer = document.getElementById(DOM_IDS.FULLSCREEN_OVERLAY);
@@ -284,6 +236,14 @@ export function renderApp(state: AppState): void {
   }
 
   checkScheduledTasks(now);
+
+  if (tickResult.hasActive) {
+    startTickInterval();
+  } else if (!state.tasks.some(t => t.sessions.some(s => s.endedAt === null))) {
+    // Only clear if absolutely NO open sessions
+    // Actually hasActive from recomputeViews is authoritative for "isRunning"
+    clearTickInterval();
+  }
 }
 
 export function updateTaskRow(row: HTMLElement, view: TaskView): void {
@@ -324,7 +284,7 @@ export function updateTaskRow(row: HTMLElement, view: TaskView): void {
   const timerEl = row.querySelector('.task-timer');
   if (timerEl) timerEl.textContent = view.formattedTotal;
 
-  // Update actions only if state type changed
+  // Update actions
   const actionsEl = row.querySelector('.task-actions');
   if (actionsEl) {
     const hasResume = actionsEl.querySelector('.resume') !== null;
@@ -350,14 +310,13 @@ export function updateTaskRow(row: HTMLElement, view: TaskView): void {
         resumeBtn.title = 'Shortcut: Space';
         resumeBtn.type = 'button';
         resumeBtn.addEventListener('click', () => handleResumeTimer(view.id));
+        actionsEl.appendChild(resumeBtn);
 
         const stopBtn = document.createElement('button');
         stopBtn.className = 'action-btn stop';
         stopBtn.textContent = 'Stop';
         stopBtn.type = 'button';
         stopBtn.addEventListener('click', () => handleStopTimer(view.id));
-
-        actionsEl.appendChild(resumeBtn);
         actionsEl.appendChild(stopBtn);
       } else if (view.isRunning) {
         const pauseBtn = document.createElement('button');
@@ -366,14 +325,13 @@ export function updateTaskRow(row: HTMLElement, view: TaskView): void {
         pauseBtn.title = 'Shortcut: Space';
         pauseBtn.type = 'button';
         pauseBtn.addEventListener('click', () => handlePauseTimer(view.id));
+        actionsEl.appendChild(pauseBtn);
 
         const stopBtn = document.createElement('button');
         stopBtn.className = 'action-btn stop';
         stopBtn.textContent = 'Stop';
         stopBtn.type = 'button';
         stopBtn.addEventListener('click', () => handleStopTimer(view.id));
-
-        actionsEl.appendChild(pauseBtn);
         actionsEl.appendChild(stopBtn);
       } else {
         const startBtn = document.createElement('button');
@@ -484,8 +442,6 @@ export function handleCreateTask(nameInput: string): void {
     };
 
     dispatch({
-      currentState: appState.currentState === 'idle_running' || appState.currentState === 'idle_paused'
-        ? appState.currentState : 'idle',
       tasks: [taskWithOptions, ...appState.tasks.filter(t => t.id !== newTask.id)],
       error: null,
     });
@@ -504,66 +460,20 @@ export function handleCreateTask(nameInput: string): void {
 
 export function handleStartTimer(taskId: string): void {
   const now = Date.now();
-
-  if (
-    appState.currentState === 'idle_running' &&
-    taskId === appState.runningTaskId
-  ) {
-    const updatedTasks = ignoreAlreadyRunning({ taskId, now }, appState.tasks);
-    dispatch({ tasks: updatedTasks });
-    return;
-  }
-
   try {
-    let nextTasks: Task[];
-
-    if ((appState.currentState === 'idle_running' || appState.currentState === 'idle_paused') && appState.runningTaskId) {
-      if (appState.currentState === 'idle_paused') {
-        handleStopTimer(appState.runningTaskId);
-      }
-      if (appState.runningTaskId && appState.runningTaskId !== taskId) {
-        nextTasks = switchRunningTask(
-          { taskId, now },
-          appState.tasks,
-          appState.runningTaskId,
-        );
-      } else {
-        nextTasks = startSessionOnTask({ taskId, now }, appState.tasks);
-      }
-    } else {
-      nextTasks = startSessionOnTask({ taskId, now }, appState.tasks);
-    }
-
+    const updatedTasks = startSessionOnTask({ taskId, now }, appState.tasks);
     dispatch({
-      currentState: 'idle_running',
-      tasks: nextTasks,
-      runningTaskId: taskId,
+      tasks: updatedTasks,
       error: null,
     });
-
     startTickInterval();
   } catch (err: unknown) {
-    if (
-      err &&
-      typeof err === 'object' &&
-      'kind' in err &&
-      err.kind === 'TaskNotFound'
-    ) {
+    if (err && typeof err === 'object' && 'kind' in err && err.kind === 'TaskNotFound') {
       const error = reportTaskNotFound({ taskId, now });
-      dispatch({
-        currentState: 'error_task_not_found',
-        error,
-      });
+      dispatch({ currentState: 'error_task_not_found', error });
     } else {
-      const error = retryOrRevertStart(
-        { taskId, now },
-        appState.tasks,
-        err,
-      );
-      dispatch({
-        currentState: 'error_storage_write',
-        error,
-      });
+      const error = retryOrRevertStart({ taskId, now }, appState.tasks, err);
+      dispatch({ currentState: 'error_storage_write', error });
     }
   }
 }
@@ -573,7 +483,6 @@ export function handlePauseTimer(taskId: string): void {
   try {
     const updatedTasks = pauseSessionOnTask({ taskId, now }, appState.tasks);
     dispatch({
-      currentState: 'idle_paused',
       tasks: updatedTasks,
       error: null,
     });
@@ -588,7 +497,6 @@ export function handleResumeTimer(taskId: string): void {
   try {
     const updatedTasks = resumeSessionOnTask({ taskId, now }, appState.tasks);
     dispatch({
-      currentState: 'idle_running',
       tasks: updatedTasks,
       error: null,
     });
@@ -601,22 +509,17 @@ export function handleResumeTimer(taskId: string): void {
 
 export function handleStopTimer(taskId: string): void {
   const now = Date.now();
-
   const task = appState.tasks.find((t) => t.id === taskId);
   const openSession = task ? getOpenSession(task) : undefined;
 
   if (!openSession) {
     const error = reconcileNoOpenSession({ taskId, now }, appState.tasks);
-    dispatch({
-      currentState: 'idle_running',
-      error,
-    });
+    dispatch({ error });
     return;
   }
 
   try {
     let updatedTasks: Task[];
-
     if (now < openSession.startedAt) {
       updatedTasks = clampNegativeAndClose({ taskId, now }, appState.tasks);
     } else {
@@ -624,23 +527,12 @@ export function handleStopTimer(taskId: string): void {
     }
 
     dispatch({
-      currentState: 'idle',
       tasks: updatedTasks,
-      runningTaskId: null,
       error: null,
     });
-
-    clearTickInterval();
   } catch (err) {
-    const error = retryOrKeepOpen(
-      { taskId, now },
-      appState.tasks,
-      err,
-    );
-    dispatch({
-      currentState: 'error_storage_write',
-      error,
-    });
+    const error = retryOrKeepOpen({ taskId, now }, appState.tasks, err);
+    dispatch({ currentState: 'error_storage_write', error });
   }
 }
 
@@ -649,7 +541,6 @@ export function handleDeleteTask(taskId: string): void {
 
   if (!isConfirming) {
     dispatch({ deletingTaskId: taskId });
-    // Reset confirmation after 3 seconds if not clicked again
     setTimeout(() => {
       if (appState.deletingTaskId === taskId) {
         dispatch({ deletingTaskId: null });
@@ -659,47 +550,28 @@ export function handleDeleteTask(taskId: string): void {
   }
 
   try {
-    const wasRunning = appState.runningTaskId === taskId;
-
-    if (wasRunning) {
-      discardOpenAndDelete({ taskId, confirmed: true }, appState.tasks);
-    } else {
-      deleteTask({ taskId, confirmed: true }, appState.tasks);
-    }
-
+    discardOpenAndDelete({ taskId, confirmed: true }, appState.tasks);
     const updatedTasks = appState.tasks.filter((t) => t.id !== taskId);
-
     dispatch({
-      currentState: wasRunning ? 'idle' : appState.currentState,
       tasks: updatedTasks,
-      runningTaskId: wasRunning ? null : appState.runningTaskId,
       deletingTaskId: null,
       error: null,
     });
-
-    if (wasRunning) {
-      clearTickInterval();
-    }
   } catch (err) {
-    const error = retryOrRestoreDelete(
-      { taskId, confirmed: true },
-      appState.tasks,
-      err,
-    );
-    dispatch({
-      currentState: 'error_storage_write',
-      error,
-      deletingTaskId: null,
-    });
+    const error = retryOrRestoreDelete({ taskId, confirmed: true }, appState.tasks, err);
+    dispatch({ currentState: 'error_storage_write', error, deletingTaskId: null });
   }
 }
 
 function checkScheduledTasks(now: number): void {
   for (const task of appState.tasks) {
-    if (task.scheduledEndAt && task.scheduledEndAt <= now && appState.runningTaskId === task.id) {
-      task.scheduledEndAt = null;
-      handleStopTimer(task.id);
-      return;
+    if (task.scheduledEndAt && task.scheduledEndAt <= now) {
+      const open = getOpenSession(task);
+      if (open) {
+        task.scheduledEndAt = null;
+        handleStopTimer(task.id);
+        return;
+      }
     }
   }
 }
@@ -707,9 +579,7 @@ function checkScheduledTasks(now: number): void {
 function startTickInterval(): void {
   if (tickIntervalId === null) {
     tickIntervalId = window.setInterval(() => {
-      if (appState.currentState === 'idle_running' || appState.currentState === 'idle_paused') {
-        renderApp(appState);
-      }
+      renderApp(appState);
     }, 1000);
   }
 }
@@ -778,7 +648,6 @@ function bindEventListeners(): void {
       dispatch({
         currentState: 'idle',
         tasks: [],
-        runningTaskId: null,
         error: null,
       });
     });
@@ -794,27 +663,14 @@ function bindEventListeners(): void {
       input?.focus();
     }
 
-    if (e.key === ' ') {
-      e.preventDefault();
-      if (appState.runningTaskId) {
-        if (appState.currentState === 'idle_running') {
-          handlePauseTimer(appState.runningTaskId);
-        } else if (appState.currentState === 'idle_paused') {
-          handleResumeTimer(appState.runningTaskId);
-        }
-      } else if (appState.tasks.length > 0) {
-        handleStartTimer(appState.tasks[0].id);
-      }
-    }
-
     if (e.key === 'f') {
       e.preventDefault();
       if (appState.fullscreenTaskId) {
         handleToggleFullscreen(null);
-      } else if (appState.runningTaskId) {
-        handleToggleFullscreen(appState.runningTaskId);
       } else if (appState.tasks.length > 0) {
-        handleToggleFullscreen(appState.tasks[0].id);
+        // Toggle fullscreen for the first task if nothing is running, or first running task
+        const running = appState.tasks.find(t => t.sessions.some(s => s.endedAt === null));
+        handleToggleFullscreen(running ? running.id : appState.tasks[0].id);
       }
     }
 

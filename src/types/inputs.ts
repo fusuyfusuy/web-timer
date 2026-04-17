@@ -45,7 +45,7 @@ export interface BootInput {
 
 export interface HydrateResult {
   tasks: Task[];
-  runningTaskId: string | null;
+  hasActive: boolean;
 }
 
 export interface CorruptRecoveryResult {
@@ -70,7 +70,7 @@ export interface TickInput {
 
 export interface TickResult {
   views: TaskView[];
-  runningTaskId: string | null;
+  hasActive: boolean;
 }
 
 // ---- Dismiss / Idle snapshot ----
@@ -80,7 +80,6 @@ export interface DismissInput {
 
 export interface IdleSnapshot {
   tasks: Task[];
-  runningTaskId: string | null;
 }
 
 export { TaskSchema };

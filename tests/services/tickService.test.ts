@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { recomputeTotals, recomputeTotalsWithOpen } from '../../src/services/tickService';
+import { recomputeViews } from '../../src/services/tickService';
 import type { Task } from '../../src/types/task';
 
 beforeEach(() => {
@@ -8,39 +8,34 @@ beforeEach(() => {
 });
 
 const tasks: Task[] = [
-  { id: 'a', name: 'A', createdAt: 1, sessions: [{ startedAt: 1000, endedAt: 2000 }] },
-  { id: 'b', name: 'B', createdAt: 2, sessions: [{ startedAt: 3000, endedAt: null }] },
+  { id: 'a', name: 'A', createdAt: 1, sessions: [{ startedAt: 1000, endedAt: 2000, pauses: [] }], timerMode: 'countup', countdownDurationMs: null, scheduledStartAt: null, scheduledEndAt: null },
+  { id: 'b', name: 'B', createdAt: 2, sessions: [{ startedAt: 3000, endedAt: null, pauses: [] }], timerMode: 'countup', countdownDurationMs: null, scheduledStartAt: null, scheduledEndAt: null },
 ];
 
-describe('recomputeTotals — TICK (idle → idle)', () => {
-  it('happy path: produces TaskView[] with isRunning=false', () => {
-    const closedOnly: Task[] = [
-      { id: 'a', name: 'A', createdAt: 1, sessions: [{ startedAt: 0, endedAt: 1000 }] },
+describe('recomputeViews — TICK', () => {
+  it('happy path: marks tasks with open sessions as running', () => {
+    const r = recomputeViews({ now: 4000 }, tasks);
+    expect(r.hasActive).toBe(true);
+    const viewA = r.views.find(v => v.id === 'a')!;
+    const viewB = r.views.find(v => v.id === 'b')!;
+    expect(viewA.isRunning).toBe(false);
+    expect(viewB.isRunning).toBe(true);
+    expect(viewB.totalMs).toBe(1000);
+  });
+
+  it('happy path: detects multiple active timers', () => {
+    const bothActive: Task[] = [
+      { id: '1', name: '1', createdAt: 1, sessions: [{ startedAt: 0, endedAt: null, pauses: [] }], timerMode: 'countup', countdownDurationMs: null, scheduledStartAt: null, scheduledEndAt: null },
+      { id: '2', name: '2', createdAt: 2, sessions: [{ startedAt: 0, endedAt: null, pauses: [] }], timerMode: 'countup', countdownDurationMs: null, scheduledStartAt: null, scheduledEndAt: null },
     ];
-    const r = recomputeTotals({ now: 5000 }, closedOnly);
-    expect(r.runningTaskId).toBeNull();
-    expect(r.views[0].isRunning).toBe(false);
-    expect(r.views[0].totalMs).toBe(1000);
-    expect(r.views[0].formattedTotal).toBe('00:00:01');
+    const r = recomputeViews({ now: 1000 }, bothActive);
+    expect(r.hasActive).toBe(true);
+    expect(r.views[0].isRunning).toBe(true);
+    expect(r.views[1].isRunning).toBe(true);
   });
 
-  it('error path: empty task list returns empty views', () => {
-    const r = recomputeTotals({ now: 5000 }, []);
-    expect(r.views).toEqual([]);
-  });
-});
-
-describe('recomputeTotalsWithOpen — TICK (idle_running → idle_running)', () => {
-  it('happy path: marks runningTaskId view as running, includes live delta', () => {
-    const r = recomputeTotalsWithOpen({ now: 4000 }, tasks, 'b');
-    expect(r.runningTaskId).toBe('b');
-    const running = r.views.find((v) => v.id === 'b');
-    expect(running?.isRunning).toBe(true);
-    expect(running?.totalMs).toBe(1000);
-  });
-
-  it('error path: sorted newest-first by createdAt', () => {
-    const r = recomputeTotalsWithOpen({ now: 4000 }, tasks, 'b');
+  it('happy path: sorted newest-first by createdAt', () => {
+    const r = recomputeViews({ now: 4000 }, tasks);
     expect(r.views.map((v) => v.id)).toEqual(['b', 'a']);
   });
 });

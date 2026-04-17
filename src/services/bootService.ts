@@ -1,6 +1,4 @@
 // bootService — application hydration and boot reconciliation.
-// Covers statechart actions: hydrateTasks, resumeOpenSession, stashCorruptAndPrompt,
-// startMemoryOnly, promptMigrationReset, reconcileMultipleOpenSessions.
 import type {
   BootInput,
   HydrateResult,
@@ -8,13 +6,12 @@ import type {
   MemoryOnlyResult,
   SchemaMismatchResult,
 } from '../types/inputs';
-import { parsePersistedState, stashCorruptBlob, writePersistedState } from '../storage/localStorageAdapter';
+import { parsePersistedState, stashCorruptBlob } from '../storage/localStorageAdapter';
 import { PERSISTED_SCHEMA_VERSION, STORAGE_BACKUP_KEY } from '../types/task';
-import { hasOpenSession } from '../lib/time';
 
 export function hydrateTasks(input: BootInput): HydrateResult {
   if (input.rawStorage === null) {
-    return { tasks: [], runningTaskId: null };
+    return { tasks: [], hasActive: false };
   }
 
   const parseResult = parsePersistedState(input.rawStorage);
@@ -22,26 +19,9 @@ export function hydrateTasks(input: BootInput): HydrateResult {
     throw parseResult.error;
   }
 
-  const hasOpen = parseResult.state.tasks.some(t => hasOpenSession(t));
-  if (hasOpen) {
-    throw new Error('MultipleOpenSessions');
-  }
+  const hasActive = parseResult.state.tasks.some(t => t.sessions.some(s => s.endedAt === null));
 
-  return { tasks: parseResult.state.tasks, runningTaskId: null };
-}
-
-export function resumeOpenSession(input: BootInput): HydrateResult {
-  const parseResult = parsePersistedState(input.rawStorage!);
-  if (!parseResult.ok) {
-    throw parseResult.error;
-  }
-
-  const tasksWithOpen = parseResult.state.tasks.filter(t => hasOpenSession(t));
-  if (tasksWithOpen.length !== 1) {
-    throw new Error('MultipleOpenSessions');
-  }
-
-  return { tasks: parseResult.state.tasks, runningTaskId: tasksWithOpen[0].id };
+  return { tasks: parseResult.state.tasks, hasActive };
 }
 
 export function stashCorruptAndPrompt(input: BootInput): CorruptRecoveryResult {
@@ -72,43 +52,4 @@ export function promptMigrationReset(input: BootInput): SchemaMismatchResult {
     expectedVersion: PERSISTED_SCHEMA_VERSION,
     promptMessage: 'Stored data format is incompatible. Reset to start fresh?',
   };
-}
-
-export function reconcileMultipleOpenSessions(input: BootInput): HydrateResult {
-  const parseResult = parsePersistedState(input.rawStorage!);
-  if (!parseResult.ok) {
-    throw parseResult.error;
-  }
-
-  const openPairs: Array<{ taskIndex: number; sessionIndex: number; startedAt: number }> = [];
-  for (let ti = 0; ti < parseResult.state.tasks.length; ti++) {
-    const task = parseResult.state.tasks[ti];
-    for (let si = 0; si < task.sessions.length; si++) {
-      const session = task.sessions[si];
-      if (session.endedAt === null) {
-        openPairs.push({ taskIndex: ti, sessionIndex: si, startedAt: session.startedAt });
-      }
-    }
-  }
-
-  openPairs.sort((a, b) => b.startedAt - a.startedAt);
-  const mostRecentPair = openPairs[0];
-
-  const finalTasks = parseResult.state.tasks.map((task, ti) => ({
-    ...task,
-    sessions: task.sessions.map((session, si) => {
-      const pair = openPairs.find(p => p.taskIndex === ti && p.sessionIndex === si);
-      if (pair && pair !== mostRecentPair) {
-        return { ...session, endedAt: session.startedAt };
-      }
-      return session;
-    }),
-  }));
-
-  try {
-    writePersistedState({ schemaVersion: PERSISTED_SCHEMA_VERSION, tasks: finalTasks });
-  } catch {
-  }
-
-  return { tasks: finalTasks, runningTaskId: parseResult.state.tasks[mostRecentPair.taskIndex].id };
 }

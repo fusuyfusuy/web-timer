@@ -1,18 +1,20 @@
-// timerService — start/stop/switch timer sessions.
-// Covers statechart actions: startSessionOnTask, switchRunningTask, ignoreAlreadyRunning,
-// stopSessionOnTask, clampNegativeAndClose, reportTaskNotFound, retryOrRevertStart,
-// retryOrKeepOpen, reconcileNoOpenSession.
+// timerService — start/stop/pause timer sessions.
 import type { Task } from '../types/task';
 import type { StartTimerInput, StopTimerInput } from '../types/inputs';
-import type { TaskNotFoundError, StorageWriteError, NoOpenSessionError } from '../types/errors';
+import type { TaskNotFoundError, NoOpenSessionError } from '../types/errors';
 import { PERSISTED_SCHEMA_VERSION } from '../types/task';
 import { writePersistedState } from '../storage/localStorageAdapter';
-import { getOpenSession } from '../lib/time';
+import { getOpenSession, hasOpenSession } from '../lib/time';
 
 export function startSessionOnTask(input: StartTimerInput, currentTasks: Task[]): Task[] {
   const task = currentTasks.find(t => t.id === input.taskId);
   if (!task) {
     throw { kind: 'TaskNotFound', taskId: input.taskId, message: `Task ${input.taskId} not found` } as TaskNotFoundError;
+  }
+
+  // If already running, just return current state
+  if (hasOpenSession(task)) {
+    return currentTasks;
   }
 
   const updatedTask: Task = {
@@ -30,58 +32,11 @@ export function startSessionOnTask(input: StartTimerInput, currentTasks: Task[])
   return updatedTasks;
 }
 
-export function switchRunningTask(
-  input: StartTimerInput,
-  currentTasks: Task[],
-  runningTaskId: string,
-): Task[] {
-  const runningTask = currentTasks.find(t => t.id === runningTaskId);
-  if (!runningTask) {
-    throw { kind: 'TaskNotFound', taskId: runningTaskId, message: `Running task ${runningTaskId} not found` } as TaskNotFoundError;
-  }
-
-  const openSession = getOpenSession(runningTask);
-  if (!openSession) {
-    throw { kind: 'NoOpenSession', taskId: runningTaskId, message: 'No open session on running task' } as NoOpenSessionError;
-  }
-
-  const closedEndedAt = input.now < openSession.startedAt ? openSession.startedAt : input.now;
-  const updatedRunningTask: Task = {
-    ...runningTask,
-    sessions: runningTask.sessions.map(s => s === openSession ? { ...s, endedAt: closedEndedAt } : s)
-  };
-
-  const targetTask = currentTasks.find(t => t.id === input.taskId);
-  if (!targetTask) {
-    throw { kind: 'TaskNotFound', taskId: input.taskId, message: `Task ${input.taskId} not found` } as TaskNotFoundError;
-  }
-
-  const updatedTargetTask: Task = {
-    ...targetTask,
-    sessions: [...targetTask.sessions, { startedAt: input.now, endedAt: null, pauses: [] }]
-  };
-
-  const updatedTasks = currentTasks.map(t => {
-    if (t.id === runningTaskId) return updatedRunningTask;
-    if (t.id === input.taskId) return updatedTargetTask;
-    return t;
-  });
-
-  const result = writePersistedState({ schemaVersion: PERSISTED_SCHEMA_VERSION, tasks: updatedTasks });
-  if (!result.ok) {
-    throw result.error;
-  }
-
-  return updatedTasks;
-}
-
 export function ignoreAlreadyRunning(input: StartTimerInput, currentTasks: Task[]): Task[] {
   const task = currentTasks.find(t => t.id === input.taskId);
   if (!task) {
     throw { kind: 'TaskNotFound', taskId: input.taskId, message: `Task ${input.taskId} not found` } as TaskNotFoundError;
   }
-
-  console.warn(`Start called on already-running task: ${input.taskId}`);
   return currentTasks;
 }
 
@@ -121,8 +76,6 @@ export function clampNegativeAndClose(input: StopTimerInput, currentTasks: Task[
   if (!openSession) {
     throw { kind: 'NoOpenSession', taskId: input.taskId, message: 'No open session found on task' } as NoOpenSessionError;
   }
-
-  console.warn(`Negative duration detected: now=${input.now}, startedAt=${openSession.startedAt}`);
 
   const updatedTask: Task = {
     ...task,
@@ -209,17 +162,13 @@ export function retryOrRevertStart(
   _input: StartTimerInput,
   previousTasks: Task[],
   cause: unknown,
-): StorageWriteError {
-  void _input;
-  const retryResult = writePersistedState({ schemaVersion: PERSISTED_SCHEMA_VERSION, tasks: previousTasks });
-
-  const reverted = retryResult.ok;
-
+): any {
+  const result = writePersistedState({ schemaVersion: PERSISTED_SCHEMA_VERSION, tasks: previousTasks });
   return {
     kind: 'StorageWriteFailed',
     message: 'Failed to start timer',
     attempt: 2,
-    reverted,
+    reverted: result.ok,
     cause
   };
 }
@@ -228,10 +177,8 @@ export function retryOrKeepOpen(
   _input: StopTimerInput,
   previousTasks: Task[],
   cause: unknown,
-): StorageWriteError {
-  void _input;
+): any {
   writePersistedState({ schemaVersion: PERSISTED_SCHEMA_VERSION, tasks: previousTasks });
-
   return {
     kind: 'StorageWriteFailed',
     message: 'Failed to stop timer; session kept open',
@@ -242,16 +189,12 @@ export function retryOrKeepOpen(
 }
 
 export function reconcileNoOpenSession(
-  _input: StopTimerInput,
+  input: StopTimerInput,
   _currentTasks: Task[],
 ): NoOpenSessionError {
-  void _input;
-  void _currentTasks;
-  console.warn(`No open session found on task: ${_input.taskId}`);
-
   return {
     kind: 'NoOpenSession',
-    taskId: _input.taskId,
+    taskId: input.taskId,
     message: 'No open session found on task'
   };
 }

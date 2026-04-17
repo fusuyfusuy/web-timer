@@ -1,12 +1,12 @@
 import type { Task, TaskView } from '../types/task';
 import type { TickInput, TickResult } from '../types/inputs';
-import { computeTaskTotalMs, computeCountdownRemainingMs, formatHHMMSS, isPaused } from '../lib/time';
+import { computeTaskTotalMs, computeCountdownRemainingMs, formatHHMMSS, isPaused, hasOpenSession } from '../lib/time';
 
-function buildView(task: Task, now: number, runningTaskId: string | null): TaskView {
+function buildView(task: Task, now: number): TaskView {
   const totalMs = computeTaskTotalMs(task, now);
   const isCountdown = task.timerMode === 'countdown';
   const remainingMs = isCountdown ? computeCountdownRemainingMs(task, now) : null;
-  const isRunning = task.id === runningTaskId;
+  const isRunning = hasOpenSession(task);
 
   return {
     id: task.id,
@@ -22,18 +22,9 @@ function buildView(task: Task, now: number, runningTaskId: string | null): TaskV
   };
 }
 
-export function recomputeTotals(input: TickInput, tasks: Task[]): TickResult {
-  const views = tasks.map(t => buildView(t, input.now, null));
+export function recomputeViews(input: TickInput, tasks: Task[]): TickResult {
+  const views = tasks.map(t => buildView(t, input.now));
   views.sort((a, b) => b.createdAt - a.createdAt);
-  return { views, runningTaskId: null };
-}
-
-export function recomputeTotalsWithOpen(
-  input: TickInput,
-  tasks: Task[],
-  runningTaskId: string,
-): TickResult {
-  const views = tasks.map(t => buildView(t, input.now, runningTaskId));
-  views.sort((a, b) => b.createdAt - a.createdAt);
-  return { views, runningTaskId };
+  const hasActive = views.some(v => v.isRunning);
+  return { views, hasActive };
 }
