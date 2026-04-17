@@ -20,7 +20,6 @@ import {
   rejectInvalidName,
   reportStorageWriteFailure,
   deleteTask,
-  abortDeleteSilently,
   retryOrRestoreDelete,
   discardOpenAndDelete,
 } from '../services/taskService';
