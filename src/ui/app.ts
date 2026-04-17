@@ -261,13 +261,6 @@ export function updateTaskRow(row: HTMLElement, view: TaskView): void {
   if (view.isPaused) row.classList.add('paused');
   if (view.isCountdown) row.classList.add('countdown');
   if (view.isExpired) row.classList.add('expired');
-  if (
-    task?.scheduledStartAt &&
-    task.scheduledStartAt > now &&
-    !view.isRunning
-  ) {
-    row.classList.add('scheduled');
-  }
 
   // Update progress for countdown
   if (view.isCountdown && view.remainingMs !== null && task?.countdownDurationMs) {
@@ -289,16 +282,6 @@ export function updateTaskRow(row: HTMLElement, view: TaskView): void {
       metaEl.textContent = 'Paused';
     } else if (view.isRunning) {
       metaEl.textContent = 'Running';
-    } else if (
-      task?.scheduledStartAt &&
-      task.scheduledStartAt > now &&
-      !view.isRunning
-    ) {
-      const dt = new Date(task.scheduledStartAt);
-      metaEl.textContent = `Starts at ${dt.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })}`;
     } else {
       metaEl.textContent = '';
     }
@@ -415,7 +398,6 @@ export function handleCreateTask(nameInput: string): void {
   const hoursEl = document.getElementById(DOM_IDS.CD_HOURS) as HTMLInputElement | null;
   const minsEl = document.getElementById(DOM_IDS.CD_MINUTES) as HTMLInputElement | null;
   const secsEl = document.getElementById(DOM_IDS.CD_SECONDS) as HTMLInputElement | null;
-  const startEl = document.getElementById(DOM_IDS.SCHEDULED_START) as HTMLInputElement | null;
   const endEl = document.getElementById(DOM_IDS.SCHEDULED_END) as HTMLInputElement | null;
 
   let countdownDurationMs: number | null = null;
@@ -427,8 +409,16 @@ export function handleCreateTask(nameInput: string): void {
     if (countdownDurationMs <= 0) countdownDurationMs = 5 * 60 * 1000;
   }
 
-  const scheduledStartAt = startEl?.value ? new Date(startEl.value).getTime() : null;
-  const scheduledEndAt = endEl?.value ? new Date(endEl.value).getTime() : null;
+  let scheduledEndAt: number | null = null;
+  if (endEl?.value) {
+    const [hours, minutes] = endEl.value.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    if (date.getTime() <= Date.now()) {
+      date.setDate(date.getDate() + 1);
+    }
+    scheduledEndAt = date.getTime();
+  }
 
   try {
     const newTask = createTask({ name: nameInput }, appState.tasks);
@@ -436,7 +426,7 @@ export function handleCreateTask(nameInput: string): void {
       ...newTask,
       timerMode: selectedMode,
       countdownDurationMs,
-      scheduledStartAt,
+      scheduledStartAt: null,
       scheduledEndAt,
     };
 
@@ -449,7 +439,6 @@ export function handleCreateTask(nameInput: string): void {
 
     const inputEl = document.getElementById(DOM_IDS.TASK_NAME_INPUT);
     if (inputEl && inputEl instanceof HTMLInputElement) inputEl.value = '';
-    if (startEl) startEl.value = '';
     if (endEl) endEl.value = '';
   } catch (err) {
     const error = reportStorageWriteFailure({ name: nameInput }, err);
@@ -651,14 +640,6 @@ export function handleDeleteTask(taskId: string): void {
 
 function checkScheduledTasks(now: number): void {
   for (const task of appState.tasks) {
-    if (task.scheduledStartAt && task.scheduledStartAt <= now && !appState.runningTaskId) {
-      const hasAnySessions = task.sessions.length > 0;
-      if (!hasAnySessions) {
-        task.scheduledStartAt = null;
-        handleStartTimer(task.id);
-        return;
-      }
-    }
     if (task.scheduledEndAt && task.scheduledEndAt <= now && appState.runningTaskId === task.id) {
       task.scheduledEndAt = null;
       handleStopTimer(task.id);

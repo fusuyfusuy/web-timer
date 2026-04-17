@@ -10,7 +10,6 @@ export const DOM_IDS = {
   CD_HOURS: 'cd-hours',
   CD_MINUTES: 'cd-minutes',
   CD_SECONDS: 'cd-seconds',
-  SCHEDULED_START: 'scheduled-start',
   SCHEDULED_END: 'scheduled-end',
   CREATE_TASK_FORM: 'create-task-form',
 };
