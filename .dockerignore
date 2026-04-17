@@ -1,0 +1,7 @@
+node_modules
+dist
+.git
+.mcd
+docs
+tests
+*.md
