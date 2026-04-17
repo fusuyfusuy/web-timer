@@ -251,11 +251,28 @@ export function renderApp(state: AppState): void {
 
   const errorBanner = document.getElementById(DOM_IDS.ERROR_BANNER);
   const errorMessage = document.getElementById(DOM_IDS.ERROR_MESSAGE);
-  if (state.error !== null) {
+  const validationError = document.getElementById(DOM_IDS.VALIDATION_ERROR);
+  const taskInput = document.getElementById(DOM_IDS.TASK_NAME_INPUT);
+
+  const isValidationError = state.currentState === 'error_validation';
+
+  if (state.error !== null && !isValidationError) {
     if (errorBanner) errorBanner.hidden = false;
     if (errorMessage) errorMessage.textContent = state.error.message;
   } else {
     if (errorBanner) errorBanner.hidden = true;
+  }
+
+  if (validationError && taskInput) {
+    if (isValidationError && state.error) {
+      validationError.textContent = state.error.message;
+      validationError.hidden = false;
+      taskInput.classList.add('error');
+    } else {
+      validationError.hidden = true;
+      validationError.textContent = '';
+      taskInput.classList.remove('error');
+    }
   }
 
   const addTaskSubmit = document.getElementById(DOM_IDS.ADD_TASK_BTN);

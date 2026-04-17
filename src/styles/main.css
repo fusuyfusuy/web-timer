@@ -94,8 +94,15 @@ body {
   gap: 0.75rem;
 }
 
-.task-input {
+.task-input-group {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.task-input {
+  width: 100%;
   background: #09090b;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -112,6 +119,18 @@ body {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
+.task-input.error {
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
+.validation-error {
+  color: var(--red);
+  font-size: 0.85rem;
+  font-weight: 500;
+  animation: fadeIn 0.2s ease;
+}
+
 .create-options {
   display: flex;
   justify-content: space-between;
@@ -120,6 +139,45 @@ body {
   gap: 1rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--glass-border);
+}
+
+.countdown-settings {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.countdown-or {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.until-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #09090b;
+  padding: 0.3rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.until-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.schedule-input {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  outline: none;
+  color-scheme: dark;
 }
 
 .mode-toggle {

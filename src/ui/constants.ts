@@ -13,6 +13,7 @@ export const DOM_IDS = {
   SCHEDULED_END: 'scheduled-end',
   CREATE_TASK_FORM: 'create-task-form',
   FULLSCREEN_OVERLAY: 'fullscreen-overlay',
+  VALIDATION_ERROR: 'validation-error',
 };
 
 export const STORAGE_KEYS = {

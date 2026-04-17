@@ -14,14 +14,17 @@
 
       <section id="create-task-section" class="create-section">
         <form id="create-task-form" class="create-form">
-          <input
-            type="text"
-            id="task-name-input"
-            class="task-input"
-            placeholder="New task name..."
-            maxlength="200"
-            autocomplete="off"
-          />
+          <div class="task-input-group">
+            <input
+              type="text"
+              id="task-name-input"
+              class="task-input"
+              placeholder="New task name..."
+              maxlength="200"
+              autocomplete="off"
+            />
+            <p id="validation-error" class="validation-error" hidden></p>
+          </div>
           <div class="create-options">
             <div class="mode-toggle">
               <button type="button" id="mode-countup" class="mode-btn active" data-mode="countup">Count Up</button>
@@ -35,22 +38,15 @@
                 <span class="duration-sep">:</span>
                 <input type="number" id="cd-seconds" class="duration-input" min="0" max="59" value="0" placeholder="S" />
               </div>
-            </div>
-            <div id="schedule-settings" class="schedule-settings">
-              <details class="schedule-details">
-                <summary>Schedule</summary>
-                <div class="schedule-fields">
-                  <label>
-                    <span>End at</span>
-                    <input type="time" id="scheduled-end" class="schedule-input" />
-                  </label>
-                </div>
-              </details>
+              <span class="countdown-or">or</span>
+              <div class="until-picker">
+                <span class="until-label">Until</span>
+                <input type="time" id="scheduled-end" class="schedule-input" />
+              </div>
             </div>
           </div>
           <button type="submit" id="add-task-btn" class="add-btn">Add</button>
         </form>
-        <p id="validation-error" class="validation-error" hidden></p>
       </section>
 
       <section id="error-banner" class="error-banner" hidden>
