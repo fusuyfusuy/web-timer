@@ -26,13 +26,13 @@ const runningTask: Task = {
   id: 't2',
   name: 'T2',
   createdAt: 2,
-  sessions: [{ startedAt: 100, endedAt: null }],
+  sessions: [{ startedAt: 100, endedAt: null, pauses: [] }],
 };
 
 describe('startSessionOnTask — START_TIMER (idle → idle_running)', () => {
   it('happy path: appends open session', () => {
     const updated = startSessionOnTask({ taskId: 't1', now: 1000 }, [idleTask]);
-    expect(updated.sessions).toEqual([{ startedAt: 1000, endedAt: null }]);
+    expect(updated.sessions).toEqual([{ startedAt: 1000, endedAt: null, pauses: [] }]);
   });
 
   it('error path: throws TaskNotFoundError for unknown task', () => {
@@ -44,7 +44,7 @@ describe('switchRunningTask — START_TIMER (idle_running → idle_running, diff
   it('happy path: closes old open session, starts new one', () => {
     const updated = switchRunningTask({ taskId: 't1', now: 500 }, [runningTask, idleTask], 't2');
     expect(updated.id).toBe('t1');
-    expect(updated.sessions).toEqual([{ startedAt: 500, endedAt: null }]);
+    expect(updated.sessions).toEqual([{ startedAt: 500, endedAt: null, pauses: [] }]);
     const persisted = JSON.parse(mock.__store.get('webtimer:state:v1')!);
     const oldTask = persisted.tasks.find((t: Task) => t.id === 't2');
     expect(oldTask.sessions[0].endedAt).toBe(500);
