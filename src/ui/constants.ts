@@ -12,6 +12,7 @@ export const DOM_IDS = {
   CD_SECONDS: 'cd-seconds',
   SCHEDULED_END: 'scheduled-end',
   CREATE_TASK_FORM: 'create-task-form',
+  FULLSCREEN_OVERLAY: 'fullscreen-overlay',
 };
 
 export const STORAGE_KEYS = {

@@ -46,6 +46,7 @@ export interface AppState {
   currentState: StateName;
   tasks: Task[];
   runningTaskId: string | null;
+  fullscreenTaskId: string | null;
   error: AppError | null;
 }
 
@@ -53,6 +54,7 @@ let appState: AppState = {
   currentState: 'booting',
   tasks: [],
   runningTaskId: null,
+  fullscreenTaskId: null,
   error: null,
 };
 
@@ -203,6 +205,21 @@ export function renderApp(state: AppState): void {
   }
 
   const taskListContainer = document.getElementById(DOM_IDS.TASK_LIST);
+  const fullscreenContainer = document.getElementById(DOM_IDS.FULLSCREEN_OVERLAY);
+
+  if (state.fullscreenTaskId && fullscreenContainer) {
+    const view = views.find(v => v.id === state.fullscreenTaskId);
+    if (view) {
+      renderFullscreen(fullscreenContainer, view);
+      fullscreenContainer.hidden = false;
+    } else {
+      dispatch({ fullscreenTaskId: null });
+    }
+  } else if (fullscreenContainer) {
+    fullscreenContainer.hidden = true;
+    fullscreenContainer.innerHTML = '';
+  }
+
   if (taskListContainer) {
     const currentRows = Array.from(taskListContainer.children).filter(el =>
       el.classList.contains('task-card'),
@@ -296,11 +313,13 @@ export function updateTaskRow(row: HTMLElement, view: TaskView): void {
     const hasResume = actionsEl.querySelector('.resume') !== null;
     const hasPause = actionsEl.querySelector('.pause') !== null;
     const hasStart = actionsEl.querySelector('.start') !== null;
+    const hasExpand = actionsEl.querySelector('.expand') !== null;
 
     let needsRebuild = false;
     if (view.isPaused && !hasResume) needsRebuild = true;
     if (view.isRunning && !view.isPaused && !hasPause) needsRebuild = true;
     if (!view.isRunning && !hasStart) needsRebuild = true;
+    if (!hasExpand) needsRebuild = true;
 
     if (needsRebuild) {
       actionsEl.innerHTML = '';
@@ -345,6 +364,14 @@ export function updateTaskRow(row: HTMLElement, view: TaskView): void {
         startBtn.addEventListener('click', () => handleStartTimer(view.id));
         actionsEl.appendChild(startBtn);
       }
+
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'action-btn expand';
+      expandBtn.textContent = '⛶';
+      expandBtn.title = 'Full Screen (Shortcut: F)';
+      expandBtn.type = 'button';
+      expandBtn.addEventListener('click', () => handleToggleFullscreen(view.id));
+      actionsEl.appendChild(expandBtn);
 
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'action-btn delete';
@@ -742,6 +769,91 @@ function bindEventListeners(): void {
         handleStartTimer(appState.tasks[0].id);
       }
     }
+
+    if (e.key === 'f') {
+      e.preventDefault();
+      if (appState.fullscreenTaskId) {
+        handleToggleFullscreen(null);
+      } else if (appState.runningTaskId) {
+        handleToggleFullscreen(appState.runningTaskId);
+      } else if (appState.tasks.length > 0) {
+        handleToggleFullscreen(appState.tasks[0].id);
+      }
+    }
+
+    if (e.key === 'Escape') {
+      if (appState.fullscreenTaskId) {
+        handleToggleFullscreen(null);
+      }
+    }
   });
 }
 
+
+export function renderFullscreen(container: HTMLElement, view: TaskView): void {
+  if (container.dataset.renderedTaskId !== view.id) {
+    container.innerHTML = '';
+    container.dataset.renderedTaskId = view.id;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'close-btn';
+    closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => handleToggleFullscreen(null));
+    container.appendChild(closeBtn);
+
+    const name = document.createElement('div');
+    name.className = 'task-name';
+    name.textContent = view.name;
+    container.appendChild(name);
+
+    const timer = document.createElement('div');
+    timer.className = 'task-timer';
+    container.appendChild(timer);
+
+    const actions = document.createElement('div');
+    actions.className = 'task-actions';
+    container.appendChild(actions);
+  }
+
+  const timer = container.querySelector('.task-timer');
+  if (timer) timer.textContent = view.formattedTotal;
+
+  const actionsEl = container.querySelector('.task-actions');
+  if (actionsEl) {
+    const stateKey = `${view.isRunning}-${view.isPaused}`;
+    if (actionsEl.dataset.stateKey !== stateKey) {
+      actionsEl.innerHTML = '';
+      actionsEl.dataset.stateKey = stateKey;
+
+      if (view.isPaused) {
+        const resumeBtn = document.createElement('button');
+        resumeBtn.className = 'action-btn resume';
+        resumeBtn.textContent = 'Resume';
+        resumeBtn.addEventListener('click', () => handleResumeTimer(view.id));
+        actionsEl.appendChild(resumeBtn);
+      } else if (view.isRunning) {
+        const pauseBtn = document.createElement('button');
+        pauseBtn.className = 'action-btn pause';
+        pauseBtn.textContent = 'Pause';
+        pauseBtn.addEventListener('click', () => handlePauseTimer(view.id));
+        actionsEl.appendChild(pauseBtn);
+      } else {
+        const startBtn = document.createElement('button');
+        startBtn.className = 'action-btn start';
+        startBtn.textContent = 'Start';
+        startBtn.addEventListener('click', () => handleStartTimer(view.id));
+        actionsEl.appendChild(startBtn);
+      }
+      
+      const stopBtn = document.createElement('button');
+      stopBtn.className = 'action-btn stop';
+      stopBtn.textContent = 'Stop';
+      stopBtn.addEventListener('click', () => handleStopTimer(view.id));
+      actionsEl.appendChild(stopBtn);
+    }
+  }
+}
+
+export function handleToggleFullscreen(taskId: string | null): void {
+  dispatch({ fullscreenTaskId: taskId });
+}
