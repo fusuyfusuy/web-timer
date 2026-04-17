@@ -47,6 +47,7 @@ export interface AppState {
   tasks: Task[];
   runningTaskId: string | null;
   fullscreenTaskId: string | null;
+  deletingTaskId: string | null;
   error: AppError | null;
 }
 
@@ -55,6 +56,7 @@ let appState: AppState = {
   tasks: [],
   runningTaskId: null,
   fullscreenTaskId: null,
+  deletingTaskId: null,
   error: null,
 };
 
@@ -330,12 +332,15 @@ export function updateTaskRow(row: HTMLElement, view: TaskView): void {
     const hasPause = actionsEl.querySelector('.pause') !== null;
     const hasStart = actionsEl.querySelector('.start') !== null;
     const hasExpand = actionsEl.querySelector('.expand') !== null;
+    const isConfirmingElement = actionsEl.querySelector('.delete.confirming') !== null;
+    const shouldBeConfirming = appState.deletingTaskId === view.id;
 
     let needsRebuild = false;
     if (view.isPaused && !hasResume) needsRebuild = true;
     if (view.isRunning && !view.isPaused && !hasPause) needsRebuild = true;
     if (!view.isRunning && !hasStart) needsRebuild = true;
     if (!hasExpand) needsRebuild = true;
+    if (isConfirmingElement !== shouldBeConfirming) needsRebuild = true;
 
     if (needsRebuild) {
       actionsEl.innerHTML = '';
@@ -390,10 +395,14 @@ export function updateTaskRow(row: HTMLElement, view: TaskView): void {
       actionsEl.appendChild(expandBtn);
 
       const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'action-btn delete';
-      deleteBtn.textContent = '\u00d7';
+      const isConfirming = appState.deletingTaskId === view.id;
+      deleteBtn.className = `action-btn delete${isConfirming ? ' confirming' : ''}`;
+      deleteBtn.textContent = isConfirming ? 'Confirm?' : '\u00d7';
       deleteBtn.type = 'button';
-      deleteBtn.addEventListener('click', () => handleDeleteTask(view.id));
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleDeleteTask(view.id);
+      });
       actionsEl.appendChild(deleteBtn);
     }
   }
@@ -641,11 +650,16 @@ export function handleStopTimer(taskId: string): void {
 }
 
 export function handleDeleteTask(taskId: string): void {
-  const confirmed = window.confirm('Delete this task?');
+  const isConfirming = appState.deletingTaskId === taskId;
 
-  if (!confirmed) {
-    abortDeleteSilently({ taskId, confirmed: false });
-    dispatch({});
+  if (!isConfirming) {
+    dispatch({ deletingTaskId: taskId });
+    // Reset confirmation after 3 seconds if not clicked again
+    setTimeout(() => {
+      if (appState.deletingTaskId === taskId) {
+        dispatch({ deletingTaskId: null });
+      }
+    }, 3000);
     return;
   }
 
@@ -664,6 +678,7 @@ export function handleDeleteTask(taskId: string): void {
       currentState: wasRunning ? 'idle' : appState.currentState,
       tasks: updatedTasks,
       runningTaskId: wasRunning ? null : appState.runningTaskId,
+      deletingTaskId: null,
       error: null,
     });
 
@@ -679,6 +694,7 @@ export function handleDeleteTask(taskId: string): void {
     dispatch({
       currentState: 'error_storage_write',
       error,
+      deletingTaskId: null,
     });
   }
 }
