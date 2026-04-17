@@ -444,23 +444,25 @@ export function handleCreateTask(nameInput: string): void {
   const endEl = document.getElementById(DOM_IDS.SCHEDULED_END) as HTMLInputElement | null;
 
   let countdownDurationMs: number | null = null;
-  if (selectedMode === 'countdown') {
-    const h = parseInt(hoursEl?.value || '0', 10) || 0;
-    const m = parseInt(minsEl?.value || '0', 10) || 0;
-    const s = parseInt(secsEl?.value || '0', 10) || 0;
-    countdownDurationMs = ((h * 3600) + (m * 60) + s) * 1000;
-    if (countdownDurationMs <= 0) countdownDurationMs = 5 * 60 * 1000;
-  }
-
   let scheduledEndAt: number | null = null;
-  if (endEl?.value) {
-    const [hours, minutes] = endEl.value.split(':').map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    if (date.getTime() <= Date.now()) {
-      date.setDate(date.getDate() + 1);
+
+  if (selectedMode === 'countdown') {
+    if (endEl?.value) {
+      const [hours, minutes] = endEl.value.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      if (date.getTime() <= Date.now()) {
+        date.setDate(date.getDate() + 1);
+      }
+      scheduledEndAt = date.getTime();
+      countdownDurationMs = scheduledEndAt - Date.now();
+    } else {
+      const h = parseInt(hoursEl?.value || '0', 10) || 0;
+      const m = parseInt(minsEl?.value || '0', 10) || 0;
+      const s = parseInt(secsEl?.value || '0', 10) || 0;
+      countdownDurationMs = (h * 3600 + m * 60 + s) * 1000;
+      if (countdownDurationMs <= 0) countdownDurationMs = 5 * 60 * 1000;
     }
-    scheduledEndAt = date.getTime();
   }
 
   try {
@@ -711,9 +713,17 @@ function clearTickInterval(): void {
 function bindEventListeners(): void {
   const form = document.getElementById(DOM_IDS.CREATE_TASK_FORM);
   if (form && form instanceof HTMLFormElement) {
+    const inputEl = document.getElementById(DOM_IDS.TASK_NAME_INPUT);
+    if (inputEl && inputEl instanceof HTMLInputElement) {
+      inputEl.addEventListener('input', () => {
+        if (appState.currentState === 'error_validation') {
+          dispatch({ currentState: 'idle', error: null });
+        }
+      });
+    }
+
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      const inputEl = document.getElementById(DOM_IDS.TASK_NAME_INPUT);
       if (inputEl && inputEl instanceof HTMLInputElement) {
         handleCreateTask(inputEl.value);
       }
